@@ -1,0 +1,251 @@
+{
+  "name": "localwp-cpanel",
+  "displayName": "LocalWP for cPanel",
+  "description": "Pull, edit, and push WordPress sites hosted on cPanel/WHM — like LocalWP but for live servers.",
+  "version": "0.1.0",
+  "publisher": "incompletebiped",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/incompletebiped/cursor-extension-localwp.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["wordpress", "cpanel", "sftp", "ssh", "whm"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "localwpCpanel.addServer",
+        "title": "Add cPanel Server",
+        "icon": "$(add)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.testConnection",
+        "title": "Test Connection",
+        "icon": "$(plug)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.editServer",
+        "title": "Edit Server",
+        "icon": "$(edit)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.removeServer",
+        "title": "Remove Server",
+        "icon": "$(trash)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.refreshSites",
+        "title": "Refresh Sites",
+        "icon": "$(refresh)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.pullSite",
+        "title": "Pull Site (Download)",
+        "icon": "$(cloud-download)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.pushSite",
+        "title": "Push Site (Upload)",
+        "icon": "$(cloud-upload)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.diffSite",
+        "title": "Show Changed Files",
+        "icon": "$(diff)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.openSiteFolder",
+        "title": "Open Site Folder",
+        "icon": "$(folder-opened)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.cancelOperation",
+        "title": "Cancel Operation",
+        "icon": "$(stop-circle)",
+        "category": "LocalWP cPanel"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "localwp-cpanel",
+          "title": "LocalWP cPanel",
+          "icon": "resources/icons/logo.svg"
+        }
+      ]
+    },
+    "views": {
+      "localwp-cpanel": [
+        {
+          "id": "localwpCpanel.serverTree",
+          "name": "Servers"
+        },
+        {
+          "id": "localwpCpanel.siteTree",
+          "name": "WordPress Sites"
+        },
+        {
+          "id": "localwpCpanel.activityTree",
+          "name": "Activity"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "localwpCpanel.addServer",
+          "when": "view == localwpCpanel.serverTree",
+          "group": "navigation"
+        },
+        {
+          "command": "localwpCpanel.refreshSites",
+          "when": "view == localwpCpanel.siteTree",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "localwpCpanel.testConnection",
+          "when": "view == localwpCpanel.serverTree && viewItem == cpanelServer",
+          "group": "inline"
+        },
+        {
+          "command": "localwpCpanel.testConnection",
+          "when": "view == localwpCpanel.serverTree && viewItem == cpanelServer",
+          "group": "manage@1"
+        },
+        {
+          "command": "localwpCpanel.editServer",
+          "when": "view == localwpCpanel.serverTree && viewItem == cpanelServer",
+          "group": "manage@2"
+        },
+        {
+          "command": "localwpCpanel.removeServer",
+          "when": "view == localwpCpanel.serverTree && viewItem == cpanelServer",
+          "group": "manage@2"
+        },
+        {
+          "command": "localwpCpanel.pullSite",
+          "when": "view == localwpCpanel.siteTree && viewItem == wordpressSite",
+          "group": "sync@1"
+        },
+        {
+          "command": "localwpCpanel.pushSite",
+          "when": "view == localwpCpanel.siteTree && viewItem == wordpressSite",
+          "group": "sync@2"
+        },
+        {
+          "command": "localwpCpanel.diffSite",
+          "when": "view == localwpCpanel.siteTree && viewItem == wordpressSite",
+          "group": "sync@3"
+        },
+        {
+          "command": "localwpCpanel.openSiteFolder",
+          "when": "view == localwpCpanel.siteTree && viewItem == wordpressSite",
+          "group": "open@1"
+        },
+        {
+          "command": "localwpCpanel.cancelOperation",
+          "when": "view == localwpCpanel.activityTree && viewItem == runningOperation",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "LocalWP for cPanel",
+      "properties": {
+        "localwpCpanel.localSitesDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "Root directory where pulled sites are stored locally. Defaults to ~/localwp-sites."
+        },
+        "localwpCpanel.localMysqlHost": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Local MySQL host for database imports."
+        },
+        "localwpCpanel.localMysqlPort": {
+          "type": "number",
+          "default": 3306,
+          "description": "Local MySQL port."
+        },
+        "localwpCpanel.localMysqlUser": {
+          "type": "string",
+          "default": "root",
+          "description": "Local MySQL username."
+        },
+        "localwpCpanel.rejectUnauthorizedSsl": {
+          "type": "boolean",
+          "default": false,
+          "description": "Reject self-signed SSL certificates on cPanel API calls. Disable for servers with self-signed certs."
+        },
+        "localwpCpanel.sshPort": {
+          "type": "number",
+          "default": 22,
+          "description": "Default SSH port for cPanel servers."
+        },
+        "localwpCpanel.excludePatterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [
+            "wp-content/uploads/**",
+            "wp-content/cache/**",
+            "wp-content/backup-db/**",
+            "*.log",
+            ".DS_Store",
+            "node_modules/**"
+          ],
+          "description": "Glob patterns to exclude during file sync."
+        },
+        "localwpCpanel.databaseSyncMethod": {
+          "type": "string",
+          "enum": ["mysqldump", "wpcli"],
+          "default": "mysqldump",
+          "description": "Method to use for database export/import."
+        },
+        "localwpCpanel.maxConcurrentTransfers": {
+          "type": "number",
+          "default": 5,
+          "description": "Maximum concurrent SFTP file transfers."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build:prod",
+    "build": "node esbuild.js",
+    "build:prod": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "ssh2": "^1.16.0",
+    "ssh2-sftp-client": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ssh2": "^1.15.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

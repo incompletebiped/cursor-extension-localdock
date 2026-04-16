@@ -3,7 +3,14 @@
     "allow": [
       "Bash(git config *)",
       "Bash(git init *)",
-      "Bash(git remote *)"
+      "Bash(git remote *)",
+      "Bash(xargs ls *)",
+      "Bash(git -C \"C:/Users/baile/OneDrive/Code_Vault/cursor-extension-localwp\" log --oneline)",
+      "Bash(npm --version)",
+      "Bash(npm view *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

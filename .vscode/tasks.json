@@ -1,0 +1,30 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "watch",
+      "type": "shell",
+      "command": "npm run watch",
+      "isBackground": true,
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": {
+        "base": "$tsc-watch",
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "\\[esbuild\\] Watching",
+          "endsPattern": "\\[esbuild\\] Build"
+        }
+      }
+    },
+    {
+      "label": "build",
+      "type": "shell",
+      "command": "npm run build",
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}
