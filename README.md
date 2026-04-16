@@ -1,4 +1,4 @@
-# LocalWP for cPanel
+# LocalDock for cPanel
 
 > **Work in Progress** — Core pull/push workflows are functional and being tested. Docker-based local WordPress environments are implemented but not yet end-to-end tested. Not yet published to the Marketplace.
 
@@ -25,7 +25,7 @@ A Cursor / VS Code extension that replicates the [LocalWP](https://localwp.com/)
 - Exports the remote database via `mysqldump` over SSH, downloads it, and imports it into your local MySQL instance
 - Handles `DB_HOST` values like `localhost:3306` in wp-config.php correctly (splits host and port)
 - Excludes large/unnecessary directories by default (`wp-content/uploads`, `wp-content/cache`, `node_modules`, etc.)
-- Writes a `.localwp/manifest.json` with file checksums for diff-based push later
+- Writes a `.localdock/manifest.json` with file checksums for diff-based push later
 - Cancellable mid-transfer via the Activity panel
 - After pull completes, prompts to start a local Docker environment immediately
 
@@ -45,9 +45,9 @@ A Cursor / VS Code extension that replicates the [LocalWP](https://localwp.com/)
 
 ### Local Docker Environments *(implemented, testing in progress)*
 - Right-click a pulled site → **Start Local WordPress** to spin up a WordPress + MySQL stack via Docker Compose
-- Automatically scaffolds a `docker-compose.yml` in `.localwp/` — customizable, never overwritten once created
+- Automatically scaffolds a `docker-compose.yml` in `.localdock/` — customizable, never overwritten once created
 - Rewrites WordPress `siteurl`/`home` options in the SQL dump from production URL to `http://localhost:{port}` before first start
-- Patches `wp-config.php` to use Docker MySQL credentials (backup saved to `.localwp/wp-config.docker.bak`)
+- Patches `wp-config.php` to use Docker MySQL credentials (backup saved to `.localdock/wp-config.docker.bak`)
 - Assigns a unique port per site starting from 8080 (configurable), checked against both OS availability and other sites' manifests
 - **Stop Local** button tears down containers; **Open in Browser** opens the site in Cursor's built-in Simple Browser panel
 - Graceful error when Docker Desktop is not installed — shows link to download page
@@ -63,7 +63,7 @@ A Cursor / VS Code extension that replicates the [LocalWP](https://localwp.com/)
 ## Sidebar Layout
 
 ```
-LOCALWP CPANEL
+LOCALDOCK CPANEL
 ├── SERVERS
 │   └── MyServer (host, right-click to test/edit/remove)
 ├── WORDPRESS SITES
@@ -101,20 +101,20 @@ LOCALWP CPANEL
 
 ## Configuration
 
-All settings are under `LocalWP for cPanel` in VS Code settings:
+All settings are under `LocalDock for cPanel` in VS Code settings:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `localwpCpanel.localSitesDirectory` | `~/localwp-sites` | Where pulled sites are stored |
-| `localwpCpanel.localMysqlHost` | `127.0.0.1` | Local MySQL host |
-| `localwpCpanel.localMysqlPort` | `3306` | Local MySQL port |
-| `localwpCpanel.localMysqlUser` | `root` | Local MySQL username |
-| `localwpCpanel.sshPort` | `22` | Default SSH port for servers |
-| `localwpCpanel.excludePatterns` | see below | Glob patterns excluded from sync |
-| `localwpCpanel.databaseSyncMethod` | `mysqldump` | `mysqldump` or `wpcli` |
-| `localwpCpanel.maxConcurrentTransfers` | `5` | Parallel SFTP file transfers |
-| `localwpCpanel.rejectUnauthorizedSsl` | `false` | Reject self-signed SSL certs |
-| `localwpCpanel.dockerStartPort` | `8080` | Starting port for local Docker environments |
+| `localdockCpanel.localSitesDirectory` | `~/localdock-sites` | Where pulled sites are stored |
+| `localdockCpanel.localMysqlHost` | `127.0.0.1` | Local MySQL host |
+| `localdockCpanel.localMysqlPort` | `3306` | Local MySQL port |
+| `localdockCpanel.localMysqlUser` | `root` | Local MySQL username |
+| `localdockCpanel.sshPort` | `22` | Default SSH port for servers |
+| `localdockCpanel.excludePatterns` | see below | Glob patterns excluded from sync |
+| `localdockCpanel.databaseSyncMethod` | `mysqldump` | `mysqldump` or `wpcli` |
+| `localdockCpanel.maxConcurrentTransfers` | `5` | Parallel SFTP file transfers |
+| `localdockCpanel.rejectUnauthorizedSsl` | `false` | Reject self-signed SSL certs |
+| `localdockCpanel.dockerStartPort` | `8080` | Starting port for local Docker environments |
 
 Default exclude patterns:
 ```
@@ -136,7 +136,7 @@ When you click **Start Local WordPress** on a pulled site, the extension:
 
 1. Checks Docker Desktop is installed and running
 2. Assigns a unique local port (default starts at 8080)
-3. Scaffolds `.localwp/docker-compose.yml` if it doesn't exist (safe to customize — never overwritten)
+3. Scaffolds `.localdock/docker-compose.yml` if it doesn't exist (safe to customize — never overwritten)
 4. Rewrites the downloaded `db.sql` so WordPress URLs point to `http://localhost:{port}` instead of the live domain
 5. Patches `wp-config.php` to use the Docker MySQL credentials
 6. Runs `docker compose up -d` — MySQL seeded from `db.sql` on first start
@@ -144,7 +144,7 @@ When you click **Start Local WordPress** on a pulled site, the extension:
 
 To stop: right-click → **Stop Local WordPress** (runs `docker compose down`).
 
-The `docker-compose.yml` lives in `.localwp/` (not the site root) so it doesn't interfere with your WordPress source files.
+The `docker-compose.yml` lives in `.localdock/` (not the site root) so it doesn't interfere with your WordPress source files.
 
 ---
 
@@ -203,7 +203,7 @@ src/
 │   ├── FileSyncer.ts         # Concurrent SFTP download/upload with semaphore
 │   ├── DatabaseSyncer.ts     # mysqldump export/import + URL rewrite for Docker
 │   ├── DiffEngine.ts         # Checksum-based local change detection
-│   └── Manifest.ts           # .localwp/manifest.json read/write
+│   └── Manifest.ts           # .localdock/manifest.json read/write
 ├── tree/
 │   ├── ServerTreeProvider.ts
 │   ├── SiteTreeProvider.ts
@@ -220,7 +220,7 @@ src/
 └── utils/
     ├── logger.ts
     ├── configManager.ts      # Typed getters for all settings incl. dockerStartPort
-    ├── errors.ts             # LocalWPError + DOCKER_NOT_FOUND/START/STOP codes
+    ├── errors.ts             # LocalDockError + DOCKER_NOT_FOUND/START/STOP codes
     ├── pathUtils.ts
     └── progressUtils.ts
 ```

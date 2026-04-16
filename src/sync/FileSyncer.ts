@@ -30,7 +30,7 @@ export class FileSyncer {
     let indexedCount = 0;
     const remoteFiles = await this.sftp.buildIndex(
       remoteBase,
-      [...excludePatterns, '.localwp/**'],
+      [...excludePatterns, '.localdock/**'],
       (count) => {
         if (count !== indexedCount) {
           indexedCount = count;

@@ -28,7 +28,7 @@ import { openLocalSite } from './commands/openLocalSite';
 
 export function activate(context: vscode.ExtensionContext): void {
   logger.initialize(context);
-  logger.info('LocalWP for cPanel activating…');
+  logger.info('LocalDock for cPanel activating…');
 
   const configManager = new ConfigManager();
   const credManager = new CredentialManager(context);
@@ -61,70 +61,70 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('localwpCpanel.serverTree', serverTreeProvider),
-    vscode.window.registerTreeDataProvider('localwpCpanel.siteTree', siteTreeProvider),
-    vscode.window.registerTreeDataProvider('localwpCpanel.activityTree', activityTreeProvider),
-    vscode.window.registerTreeDataProvider('localwpCpanel.localDockerTree', localDockerTreeProvider)
+    vscode.window.registerTreeDataProvider('localdockCpanel.serverTree', serverTreeProvider),
+    vscode.window.registerTreeDataProvider('localdockCpanel.siteTree', siteTreeProvider),
+    vscode.window.registerTreeDataProvider('localdockCpanel.activityTree', activityTreeProvider),
+    vscode.window.registerTreeDataProvider('localdockCpanel.localDockerTree', localDockerTreeProvider)
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('localwpCpanel.addServer', () =>
+    vscode.commands.registerCommand('localdockCpanel.addServer', () =>
       addServer(registry, credManager, authProvider, serverTreeProvider, siteTreeProvider, configManager)
     ),
 
-    vscode.commands.registerCommand('localwpCpanel.testConnection', (item: ServerTreeItem) =>
+    vscode.commands.registerCommand('localdockCpanel.testConnection', (item: ServerTreeItem) =>
       testConnection(item, credManager, authProvider, siteTreeProvider)
     ),
 
-    vscode.commands.registerCommand('localwpCpanel.editServer', (item: ServerTreeItem) =>
+    vscode.commands.registerCommand('localdockCpanel.editServer', (item: ServerTreeItem) =>
       editServer(item, registry, credManager, serverTreeProvider, siteTreeProvider)
     ),
 
-    vscode.commands.registerCommand('localwpCpanel.removeServer', (item: ServerTreeItem) =>
+    vscode.commands.registerCommand('localdockCpanel.removeServer', (item: ServerTreeItem) =>
       removeServer(item, registry, credManager, serverTreeProvider, siteTreeProvider)
     ),
 
-    vscode.commands.registerCommand('localwpCpanel.refreshSites', () =>
+    vscode.commands.registerCommand('localdockCpanel.refreshSites', () =>
       refreshSites(siteTreeProvider)
     ),
 
-    vscode.commands.registerCommand('localwpCpanel.pullSite', (item: SiteTreeItem) =>
+    vscode.commands.registerCommand('localdockCpanel.pullSite', (item: SiteTreeItem) =>
       pullSite(item, registry, credManager, siteTreeProvider, localDockerTreeProvider, activityManager, configManager)
     ),
 
-    vscode.commands.registerCommand('localwpCpanel.pushSite', (item: SiteTreeItem) =>
+    vscode.commands.registerCommand('localdockCpanel.pushSite', (item: SiteTreeItem) =>
       pushSite(item, registry, credManager, siteTreeProvider, activityManager, configManager)
     ),
 
-    vscode.commands.registerCommand('localwpCpanel.diffSite', (item: SiteTreeItem) =>
+    vscode.commands.registerCommand('localdockCpanel.diffSite', (item: SiteTreeItem) =>
       diffSite(item, siteTreeProvider, configManager)
     ),
 
-    vscode.commands.registerCommand('localwpCpanel.openSiteFolder', (item: SiteTreeItem) =>
+    vscode.commands.registerCommand('localdockCpanel.openSiteFolder', (item: SiteTreeItem) =>
       openSiteFolder(item)
     ),
 
-    vscode.commands.registerCommand('localwpCpanel.cancelOperation', (item) => {
+    vscode.commands.registerCommand('localdockCpanel.cancelOperation', (item) => {
       const opId = activityTreeProvider.getOperationId(item);
       if (opId) {
         activityManager.cancel(opId);
       }
     }),
 
-    vscode.commands.registerCommand('localwpCpanel.startLocal', (item: SiteTreeItem | LocalEnvItem) =>
+    vscode.commands.registerCommand('localdockCpanel.startLocal', (item: SiteTreeItem | LocalEnvItem) =>
       startLocal(item, registry, siteTreeProvider, localDockerTreeProvider, activityManager, dockerManager)
     ),
 
-    vscode.commands.registerCommand('localwpCpanel.stopLocal', (item: SiteTreeItem | LocalEnvItem) =>
+    vscode.commands.registerCommand('localdockCpanel.stopLocal', (item: SiteTreeItem | LocalEnvItem) =>
       stopLocal(item, registry, siteTreeProvider, localDockerTreeProvider, activityManager, dockerManager)
     ),
 
-    vscode.commands.registerCommand('localwpCpanel.openLocalSite', (item: SiteTreeItem | LocalEnvItem | { site: import('./models/Site').WordPressSite }) => {
+    vscode.commands.registerCommand('localdockCpanel.openLocalSite', (item: SiteTreeItem | LocalEnvItem | { site: import('./models/Site').WordPressSite }) => {
       const site = 'site' in item ? item.site : (item as SiteTreeItem).site;
       return openLocalSite(site);
     }),
 
-    vscode.commands.registerCommand('localwpCpanel.openDockerSetup', () => {
+    vscode.commands.registerCommand('localdockCpanel.openDockerSetup', () => {
       vscode.env.openExternal(vscode.Uri.parse('https://www.docker.com/products/docker-desktop'));
     })
   );
@@ -139,9 +139,9 @@ export function activate(context: vscode.ExtensionContext): void {
     siteTreeProvider.discoverForServer(server.id);
   }
 
-  logger.info('LocalWP for cPanel activated.');
+  logger.info('LocalDock for cPanel activated.');
 }
 
 export function deactivate(): void {
-  logger.info('LocalWP for cPanel deactivated.');
+  logger.info('LocalDock for cPanel deactivated.');
 }

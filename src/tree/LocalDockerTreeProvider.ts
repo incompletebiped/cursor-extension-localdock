@@ -24,7 +24,7 @@ class DockerStatusItem extends vscode.TreeItem {
       this.description = 'Click to install';
       this.tooltip = 'Docker Desktop is required for local WordPress environments.\nClick to open the download page.';
       this.command = {
-        command: 'localwpCpanel.openDockerSetup',
+        command: 'localdockCpanel.openDockerSetup',
         title: 'Install Docker Desktop',
       };
     }

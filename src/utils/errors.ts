@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
 
-export enum LocalWPErrorCode {
+export enum LocalDockErrorCode {
   AUTH_FAILED = 'AUTH_FAILED',
   SSL_CERT_ERROR = 'SSL_CERT_ERROR',
   SFTP_PERMISSION = 'SFTP_PERMISSION',
@@ -18,15 +18,15 @@ export enum LocalWPErrorCode {
   UNKNOWN = 'UNKNOWN',
 }
 
-export class LocalWPError extends Error {
+export class LocalDockError extends Error {
   constructor(
     message: string,
-    public readonly code: LocalWPErrorCode,
+    public readonly code: LocalDockErrorCode,
     public readonly recoverable: boolean,
     public readonly cause?: unknown
   ) {
     super(message);
-    this.name = 'LocalWPError';
+    this.name = 'LocalDockError';
   }
 }
 
@@ -34,7 +34,7 @@ export function handleError(context: string, err: unknown): void {
   let message: string;
   let stack: string | undefined;
 
-  if (err instanceof LocalWPError) {
+  if (err instanceof LocalDockError) {
     message = err.message;
     stack = err.stack;
     if (err.cause instanceof Error) {
@@ -53,7 +53,7 @@ export function handleError(context: string, err: unknown): void {
   }
 
   vscode.window
-    .showErrorMessage(`LocalWP cPanel: ${message}`, 'Show Logs')
+    .showErrorMessage(`LocalDock cPanel: ${message}`, 'Show Logs')
     .then((choice) => {
       if (choice === 'Show Logs') {
         logger.show();
@@ -61,8 +61,8 @@ export function handleError(context: string, err: unknown): void {
     });
 }
 
-export function normalizeError(err: unknown): LocalWPError {
-  if (err instanceof LocalWPError) {
+export function normalizeError(err: unknown): LocalDockError {
+  if (err instanceof LocalDockError) {
     return err;
   }
 
@@ -71,18 +71,18 @@ export function normalizeError(err: unknown): LocalWPError {
   // Classify common SSH/SFTP/Axios errors
   if (err instanceof Error) {
     if (err.message.includes('All configured authentication methods failed')) {
-      return new LocalWPError(message, LocalWPErrorCode.AUTH_FAILED, true, err);
+      return new LocalDockError(message, LocalDockErrorCode.AUTH_FAILED, true, err);
     }
     if (err.message.includes('CERT_') || err.message.includes('self signed')) {
-      return new LocalWPError(message, LocalWPErrorCode.SSL_CERT_ERROR, true, err);
+      return new LocalDockError(message, LocalDockErrorCode.SSL_CERT_ERROR, true, err);
     }
     if (err.message.includes('ENOSPC')) {
-      return new LocalWPError('Local disk full', LocalWPErrorCode.DISK_FULL, false, err);
+      return new LocalDockError('Local disk full', LocalDockErrorCode.DISK_FULL, false, err);
     }
     if (err.message.includes('ETIMEDOUT') || err.message.includes('ECONNREFUSED')) {
-      return new LocalWPError(message, LocalWPErrorCode.SSH_TIMEOUT, true, err);
+      return new LocalDockError(message, LocalDockErrorCode.SSH_TIMEOUT, true, err);
     }
   }
 
-  return new LocalWPError(message, LocalWPErrorCode.UNKNOWN, true, err);
+  return new LocalDockError(message, LocalDockErrorCode.UNKNOWN, true, err);
 }

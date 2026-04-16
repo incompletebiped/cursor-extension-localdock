@@ -4,7 +4,7 @@ import * as net from 'net';
 import * as child_process from 'child_process';
 import { ConfigManager } from '../utils/configManager';
 import { logger } from '../utils/logger';
-import { LocalWPError, LocalWPErrorCode } from '../utils/errors';
+import { LocalDockError, LocalDockErrorCode } from '../utils/errors';
 import { LocalEnvStatus } from '../models/LocalEnvState';
 import { SiteManifest } from '../models/Manifest';
 import { sanitizeDbName } from '../utils/pathUtils';
@@ -16,9 +16,9 @@ export class DockerManager {
   async assertDockerAvailable(): Promise<void> {
     const version = await this.getDockerVersion();
     if (version === null) {
-      throw new LocalWPError(
+      throw new LocalDockError(
         'Docker Desktop is not installed or not in PATH. Download it from https://www.docker.com/products/docker-desktop',
-        LocalWPErrorCode.DOCKER_NOT_FOUND,
+        LocalDockErrorCode.DOCKER_NOT_FOUND,
         false
       );
     }
@@ -59,7 +59,7 @@ export class DockerManager {
   }
 
   /**
-   * Scaffold a docker-compose.yml in localPath/.localwp/ if one doesn't exist.
+   * Scaffold a docker-compose.yml in localPath/.localdock/ if one doesn't exist.
    * Returns the path to the compose file.
    */
   async scaffoldComposeFile(
@@ -68,10 +68,10 @@ export class DockerManager {
     port: number,
     dbName: string
   ): Promise<string> {
-    const localwpDir = path.join(localPath, '.localwp');
-    const composePath = path.join(localwpDir, 'docker-compose.yml');
+    const localDockDir = path.join(localPath, '.localdock');
+    const composePath = path.join(localDockDir, 'docker-compose.yml');
 
-    await fs.mkdir(localwpDir, { recursive: true });
+    await fs.mkdir(localDockDir, { recursive: true });
 
     // Don't overwrite existing file — user may have customized it
     try {
@@ -95,9 +95,9 @@ export class DockerManager {
     logger.info(`[DockerManager] Starting local environment at ${localPath}`);
     const result = await this.spawnCompose(['up', '-d', '--wait'], localPath);
     if (result.code !== 0) {
-      throw new LocalWPError(
+      throw new LocalDockError(
         `docker compose up failed: ${result.stderr}`,
-        LocalWPErrorCode.DOCKER_START_FAILED,
+        LocalDockErrorCode.DOCKER_START_FAILED,
         true
       );
     }
@@ -108,9 +108,9 @@ export class DockerManager {
     logger.info(`[DockerManager] Stopping local environment at ${localPath}`);
     const result = await this.spawnCompose(['down'], localPath);
     if (result.code !== 0) {
-      throw new LocalWPError(
+      throw new LocalDockError(
         `docker compose down failed: ${result.stderr}`,
-        LocalWPErrorCode.DOCKER_STOP_FAILED,
+        LocalDockErrorCode.DOCKER_STOP_FAILED,
         true
       );
     }
@@ -118,7 +118,7 @@ export class DockerManager {
 
   /** Get the current status of the Docker Compose stack */
   async getStatus(localPath: string): Promise<LocalEnvStatus> {
-    const composePath = path.join(localPath, '.localwp', 'docker-compose.yml');
+    const composePath = path.join(localPath, '.localdock', 'docker-compose.yml');
 
     // If no compose file, environment hasn't been initialized
     try {
@@ -167,12 +167,12 @@ export class DockerManager {
 
   /**
    * Patch wp-config.php to use the Docker MySQL container credentials.
-   * Backs up to .localwp/wp-config.docker.bak before modifying.
+   * Backs up to .localdock/wp-config.docker.bak before modifying.
    * Idempotent — skips if backup already exists.
    */
   async patchWpConfig(localPath: string): Promise<void> {
     const wpConfigPath = path.join(localPath, 'wp-config.php');
-    const backupPath = path.join(localPath, '.localwp', 'wp-config.docker.bak');
+    const backupPath = path.join(localPath, '.localdock', 'wp-config.docker.bak');
 
     // Check if we already patched (backup exists)
     try {
@@ -285,7 +285,7 @@ volumes:
     try {
       const entries = await fs.readdir(baseDir);
       for (const entry of entries) {
-        const manifestPath = path.join(baseDir, entry, '.localwp', 'manifest.json');
+        const manifestPath = path.join(baseDir, entry, '.localdock', 'manifest.json');
         if (path.join(baseDir, entry) === excludeLocalPath) { continue; }
         try {
           const raw = await fs.readFile(manifestPath, 'utf-8');
@@ -306,7 +306,7 @@ volumes:
 
   /**
    * Spawn a docker or docker compose command.
-   * When localPath is provided, uses the .localwp/docker-compose.yml in that directory.
+   * When localPath is provided, uses the .localdock/docker-compose.yml in that directory.
    * When localPath is null, just runs `docker <args>`.
    */
   private spawnCompose(
@@ -318,7 +318,7 @@ volumes:
       let spawnArgs: string[];
 
       if (localPath !== null) {
-        const composePath = path.join(localPath, '.localwp', 'docker-compose.yml');
+        const composePath = path.join(localPath, '.localdock', 'docker-compose.yml');
         command = 'docker';
         spawnArgs = ['compose', '--project-directory', localPath, '--file', composePath, ...args];
       } else {

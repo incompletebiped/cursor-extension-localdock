@@ -73,7 +73,7 @@ export async function startLocal(
     activityManager.update(opId, 20, 'Rewriting database URLs…');
 
     // Rewrite URLs in db.sql if not yet done
-    const sqlPath = path.join(site.localPath, '.localwp', 'db.sql');
+    const sqlPath = path.join(site.localPath, '.localdock', 'db.sql');
     const dbUrlRewritten = manifest?.dbUrlRewritten ?? false;
     if (!dbUrlRewritten) {
       try {
@@ -133,7 +133,7 @@ export async function startLocal(
       'Open in Browser'
     );
     if (choice === 'Open in Browser') {
-      vscode.commands.executeCommand('localwpCpanel.openLocalSite', { site: runningSite });
+      vscode.commands.executeCommand('localdockCpanel.openLocalSite', { site: runningSite });
     }
 
   } catch (err) {

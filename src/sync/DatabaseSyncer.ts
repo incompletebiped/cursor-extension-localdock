@@ -9,7 +9,7 @@ import { SftpClient } from '../api/SftpClient';
 import { WordPressSite } from '../models/Site';
 import { logger } from '../utils/logger';
 import { isValidDbIdentifier, sanitizeDbName } from '../utils/pathUtils';
-import { LocalWPError, LocalWPErrorCode } from '../utils/errors';
+import { LocalDockError, LocalDockErrorCode } from '../utils/errors';
 
 const exec = util.promisify(child_process.exec);
 
@@ -38,18 +38,18 @@ export class DatabaseSyncer {
     onProgress?: (message: string) => void
   ): Promise<void> {
     if (!isValidDbIdentifier(site.dbName)) {
-      throw new LocalWPError(
+      throw new LocalDockError(
         `Invalid database name: ${site.dbName}`,
-        LocalWPErrorCode.DB_EXPORT_FAILED,
+        LocalDockErrorCode.DB_EXPORT_FAILED,
         false
       );
     }
 
-    const tmpRemote = `/tmp/localwp_${site.dbName}_${Date.now()}.sql`;
-    const localWpDir = path.join(localSitePath, '.localwp');
-    const localSqlPath = path.join(localWpDir, 'db.sql');
+    const tmpRemote = `/tmp/localdock_${site.dbName}_${Date.now()}.sql`;
+    const localDockDir = path.join(localSitePath, '.localdock');
+    const localSqlPath = path.join(localDockDir, 'db.sql');
 
-    await fs.mkdir(localWpDir, { recursive: true });
+    await fs.mkdir(localDockDir, { recursive: true });
 
     // Dump on remote — use MYSQL_PWD env var to avoid password in process list
     onProgress?.('Exporting database…');
@@ -63,9 +63,9 @@ export class DatabaseSyncer {
 
     const dumpResult = await this.ssh.exec(dumpCmd);
     if (dumpResult.code !== 0) {
-      throw new LocalWPError(
+      throw new LocalDockError(
         `mysqldump failed: ${dumpResult.stderr}`,
-        LocalWPErrorCode.DB_EXPORT_FAILED,
+        LocalDockErrorCode.DB_EXPORT_FAILED,
         true
       );
     }
@@ -95,15 +95,15 @@ export class DatabaseSyncer {
     onProgress?: (message: string) => void
   ): Promise<void> {
     if (!isValidDbIdentifier(site.dbName)) {
-      throw new LocalWPError(
+      throw new LocalDockError(
         `Invalid database name: ${site.dbName}`,
-        LocalWPErrorCode.DB_IMPORT_FAILED,
+        LocalDockErrorCode.DB_IMPORT_FAILED,
         false
       );
     }
 
-    const localSqlPath = path.join(localSitePath, '.localwp', 'db.sql');
-    const tmpRemote = `/tmp/localwp_push_${site.dbName}_${Date.now()}.sql`;
+    const localSqlPath = path.join(localSitePath, '.localdock', 'db.sql');
+    const tmpRemote = `/tmp/localdock_push_${site.dbName}_${Date.now()}.sql`;
 
     // Re-export from local MySQL if we have local DB credentials
     if (this.localDb.password !== undefined) {
@@ -116,9 +116,9 @@ export class DatabaseSyncer {
     try {
       await fs.stat(localSqlPath);
     } catch {
-      throw new LocalWPError(
+      throw new LocalDockError(
         'No local database dump found. Pull the site first.',
-        LocalWPErrorCode.DB_IMPORT_FAILED,
+        LocalDockErrorCode.DB_IMPORT_FAILED,
         false
       );
     }
@@ -144,9 +144,9 @@ export class DatabaseSyncer {
     });
 
     if (importResult.code !== 0) {
-      throw new LocalWPError(
+      throw new LocalDockError(
         `MySQL import failed: ${importResult.stderr}`,
-        LocalWPErrorCode.DB_IMPORT_FAILED,
+        LocalDockErrorCode.DB_IMPORT_FAILED,
         true
       );
     }

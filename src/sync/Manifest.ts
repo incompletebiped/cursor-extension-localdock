@@ -3,7 +3,7 @@ import * as path from 'path';
 import { SiteManifest } from '../models/Manifest';
 import { logger } from '../utils/logger';
 
-const MANIFEST_DIR = '.localwp';
+const MANIFEST_DIR = '.localdock';
 const MANIFEST_FILE = 'manifest.json';
 
 export function getManifestDir(localSitePath: string): string {

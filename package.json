@@ -1,12 +1,12 @@
 {
-  "name": "localwp-cpanel",
-  "displayName": "LocalWP for cPanel",
+  "name": "localdock-cpanel",
+  "displayName": "LocalDock for cPanel",
   "description": "Pull, edit, and push WordPress sites hosted on cPanel/WHM — like LocalWP but for live servers.",
   "version": "0.1.0",
   "publisher": "incompletebiped",
   "repository": {
     "type": "git",
-    "url": "https://github.com/incompletebiped/cursor-extension-localwp.git"
+    "url": "https://github.com/incompletebiped/cursor-extension-localdock.git"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -18,115 +18,115 @@
   "contributes": {
     "commands": [
       {
-        "command": "localwpCpanel.addServer",
+        "command": "localdockCpanel.addServer",
         "title": "Add cPanel Server",
         "icon": "$(add)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.testConnection",
+        "command": "localdockCpanel.testConnection",
         "title": "Test Connection",
         "icon": "$(plug)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.editServer",
+        "command": "localdockCpanel.editServer",
         "title": "Edit Server",
         "icon": "$(edit)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.removeServer",
+        "command": "localdockCpanel.removeServer",
         "title": "Remove Server",
         "icon": "$(trash)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.refreshSites",
+        "command": "localdockCpanel.refreshSites",
         "title": "Refresh Sites",
         "icon": "$(refresh)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.pullSite",
+        "command": "localdockCpanel.pullSite",
         "title": "Pull Site (Download)",
         "icon": "$(cloud-download)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.pushSite",
+        "command": "localdockCpanel.pushSite",
         "title": "Push Site (Upload)",
         "icon": "$(cloud-upload)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.diffSite",
+        "command": "localdockCpanel.diffSite",
         "title": "Show Changed Files",
         "icon": "$(diff)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.openSiteFolder",
+        "command": "localdockCpanel.openSiteFolder",
         "title": "Open Site Folder",
         "icon": "$(folder-opened)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.cancelOperation",
+        "command": "localdockCpanel.cancelOperation",
         "title": "Cancel Operation",
         "icon": "$(stop-circle)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.startLocal",
+        "command": "localdockCpanel.startLocal",
         "title": "Start Local WordPress",
         "icon": "$(play)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.stopLocal",
+        "command": "localdockCpanel.stopLocal",
         "title": "Stop Local WordPress",
         "icon": "$(debug-stop)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.openLocalSite",
+        "command": "localdockCpanel.openLocalSite",
         "title": "Open in Browser",
         "icon": "$(browser)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       },
       {
-        "command": "localwpCpanel.openDockerSetup",
+        "command": "localdockCpanel.openDockerSetup",
         "title": "Install Docker Desktop",
         "icon": "$(link-external)",
-        "category": "LocalWP cPanel"
+        "category": "LocalDock cPanel"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "localwp-cpanel",
-          "title": "LocalWP cPanel",
+          "id": "localdock-cpanel",
+          "title": "LocalDock cPanel",
           "icon": "resources/icons/logo.svg"
         }
       ]
     },
     "views": {
-      "localwp-cpanel": [
+      "localdock-cpanel": [
         {
-          "id": "localwpCpanel.serverTree",
+          "id": "localdockCpanel.serverTree",
           "name": "Servers"
         },
         {
-          "id": "localwpCpanel.siteTree",
+          "id": "localdockCpanel.siteTree",
           "name": "WordPress Sites"
         },
         {
-          "id": "localwpCpanel.activityTree",
+          "id": "localdockCpanel.activityTree",
           "name": "Activity"
         },
         {
-          "id": "localwpCpanel.localDockerTree",
+          "id": "localdockCpanel.localDockerTree",
           "name": "Local Environments"
         }
       ]
@@ -134,148 +134,148 @@
     "menus": {
       "view/title": [
         {
-          "command": "localwpCpanel.addServer",
-          "when": "view == localwpCpanel.serverTree",
+          "command": "localdockCpanel.addServer",
+          "when": "view == localdockCpanel.serverTree",
           "group": "navigation"
         },
         {
-          "command": "localwpCpanel.refreshSites",
-          "when": "view == localwpCpanel.siteTree",
+          "command": "localdockCpanel.refreshSites",
+          "when": "view == localdockCpanel.siteTree",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
-          "command": "localwpCpanel.testConnection",
-          "when": "view == localwpCpanel.serverTree && viewItem == cpanelServer",
+          "command": "localdockCpanel.testConnection",
+          "when": "view == localdockCpanel.serverTree && viewItem == cpanelServer",
           "group": "inline"
         },
         {
-          "command": "localwpCpanel.testConnection",
-          "when": "view == localwpCpanel.serverTree && viewItem == cpanelServer",
+          "command": "localdockCpanel.testConnection",
+          "when": "view == localdockCpanel.serverTree && viewItem == cpanelServer",
           "group": "manage@1"
         },
         {
-          "command": "localwpCpanel.editServer",
-          "when": "view == localwpCpanel.serverTree && viewItem == cpanelServer",
+          "command": "localdockCpanel.editServer",
+          "when": "view == localdockCpanel.serverTree && viewItem == cpanelServer",
           "group": "manage@2"
         },
         {
-          "command": "localwpCpanel.removeServer",
-          "when": "view == localwpCpanel.serverTree && viewItem == cpanelServer",
+          "command": "localdockCpanel.removeServer",
+          "when": "view == localdockCpanel.serverTree && viewItem == cpanelServer",
           "group": "manage@2"
         },
         {
-          "command": "localwpCpanel.pullSite",
-          "when": "view == localwpCpanel.siteTree && viewItem =~ /wordpressSite/",
+          "command": "localdockCpanel.pullSite",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "sync@1"
         },
         {
-          "command": "localwpCpanel.pushSite",
-          "when": "view == localwpCpanel.siteTree && viewItem =~ /wordpressSite/",
+          "command": "localdockCpanel.pushSite",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "sync@2"
         },
         {
-          "command": "localwpCpanel.diffSite",
-          "when": "view == localwpCpanel.siteTree && viewItem =~ /wordpressSite/",
+          "command": "localdockCpanel.diffSite",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "sync@3"
         },
         {
-          "command": "localwpCpanel.openSiteFolder",
-          "when": "view == localwpCpanel.siteTree && viewItem =~ /wordpressSite/",
+          "command": "localdockCpanel.openSiteFolder",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "open@1"
         },
         {
-          "command": "localwpCpanel.startLocal",
-          "when": "view == localwpCpanel.siteTree && viewItem =~ /localEnv_(stopped|error)/",
+          "command": "localdockCpanel.startLocal",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /localEnv_(stopped|error)/",
           "group": "local@1"
         },
         {
-          "command": "localwpCpanel.startLocal",
-          "when": "view == localwpCpanel.siteTree && viewItem =~ /localEnv_(stopped|error)/",
+          "command": "localdockCpanel.startLocal",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /localEnv_(stopped|error)/",
           "group": "inline"
         },
         {
-          "command": "localwpCpanel.stopLocal",
-          "when": "view == localwpCpanel.siteTree && viewItem =~ /localEnv_running/",
+          "command": "localdockCpanel.stopLocal",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /localEnv_running/",
           "group": "local@1"
         },
         {
-          "command": "localwpCpanel.stopLocal",
-          "when": "view == localwpCpanel.siteTree && viewItem =~ /localEnv_running/",
+          "command": "localdockCpanel.stopLocal",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /localEnv_running/",
           "group": "inline"
         },
         {
-          "command": "localwpCpanel.openLocalSite",
-          "when": "view == localwpCpanel.siteTree && viewItem =~ /localEnv_running/",
+          "command": "localdockCpanel.openLocalSite",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /localEnv_running/",
           "group": "local@2"
         },
         {
-          "command": "localwpCpanel.startLocal",
-          "when": "view == localwpCpanel.localDockerTree && viewItem =~ /localEnv_(stopped|error)/",
+          "command": "localdockCpanel.startLocal",
+          "when": "view == localdockCpanel.localDockerTree && viewItem =~ /localEnv_(stopped|error)/",
           "group": "local@1"
         },
         {
-          "command": "localwpCpanel.startLocal",
-          "when": "view == localwpCpanel.localDockerTree && viewItem =~ /localEnv_(stopped|error)/",
+          "command": "localdockCpanel.startLocal",
+          "when": "view == localdockCpanel.localDockerTree && viewItem =~ /localEnv_(stopped|error)/",
           "group": "inline"
         },
         {
-          "command": "localwpCpanel.stopLocal",
-          "when": "view == localwpCpanel.localDockerTree && viewItem =~ /localEnv_running/",
+          "command": "localdockCpanel.stopLocal",
+          "when": "view == localdockCpanel.localDockerTree && viewItem =~ /localEnv_running/",
           "group": "local@1"
         },
         {
-          "command": "localwpCpanel.stopLocal",
-          "when": "view == localwpCpanel.localDockerTree && viewItem =~ /localEnv_running/",
+          "command": "localdockCpanel.stopLocal",
+          "when": "view == localdockCpanel.localDockerTree && viewItem =~ /localEnv_running/",
           "group": "inline"
         },
         {
-          "command": "localwpCpanel.openLocalSite",
-          "when": "view == localwpCpanel.localDockerTree && viewItem =~ /localEnv_running/",
+          "command": "localdockCpanel.openLocalSite",
+          "when": "view == localdockCpanel.localDockerTree && viewItem =~ /localEnv_running/",
           "group": "local@2"
         },
         {
-          "command": "localwpCpanel.cancelOperation",
-          "when": "view == localwpCpanel.activityTree && viewItem == runningOperation",
+          "command": "localdockCpanel.cancelOperation",
+          "when": "view == localdockCpanel.activityTree && viewItem == runningOperation",
           "group": "inline"
         }
       ]
     },
     "configuration": {
-      "title": "LocalWP for cPanel",
+      "title": "LocalDock for cPanel",
       "properties": {
-        "localwpCpanel.localSitesDirectory": {
+        "localdockCpanel.localSitesDirectory": {
           "type": "string",
           "default": "",
-          "description": "Root directory where pulled sites are stored locally. Defaults to ~/localwp-sites."
+          "description": "Root directory where pulled sites are stored locally. Defaults to ~/localdock-sites."
         },
-        "localwpCpanel.localMysqlHost": {
+        "localdockCpanel.localMysqlHost": {
           "type": "string",
           "default": "127.0.0.1",
           "description": "Local MySQL host for database imports."
         },
-        "localwpCpanel.localMysqlPort": {
+        "localdockCpanel.localMysqlPort": {
           "type": "number",
           "default": 3306,
           "description": "Local MySQL port."
         },
-        "localwpCpanel.localMysqlUser": {
+        "localdockCpanel.localMysqlUser": {
           "type": "string",
           "default": "root",
           "description": "Local MySQL username."
         },
-        "localwpCpanel.rejectUnauthorizedSsl": {
+        "localdockCpanel.rejectUnauthorizedSsl": {
           "type": "boolean",
           "default": false,
           "description": "Reject self-signed SSL certificates on cPanel API calls. Disable for servers with self-signed certs."
         },
-        "localwpCpanel.sshPort": {
+        "localdockCpanel.sshPort": {
           "type": "number",
           "default": 22,
           "description": "Default SSH port for cPanel servers."
         },
-        "localwpCpanel.excludePatterns": {
+        "localdockCpanel.excludePatterns": {
           "type": "array",
           "items": { "type": "string" },
           "default": [
@@ -288,18 +288,18 @@
           ],
           "description": "Glob patterns to exclude during file sync."
         },
-        "localwpCpanel.databaseSyncMethod": {
+        "localdockCpanel.databaseSyncMethod": {
           "type": "string",
           "enum": ["mysqldump", "wpcli"],
           "default": "mysqldump",
           "description": "Method to use for database export/import."
         },
-        "localwpCpanel.maxConcurrentTransfers": {
+        "localdockCpanel.maxConcurrentTransfers": {
           "type": "number",
           "default": 5,
           "description": "Maximum concurrent SFTP file transfers."
         },
-        "localwpCpanel.dockerStartPort": {
+        "localdockCpanel.dockerStartPort": {
           "type": "number",
           "default": 8080,
           "description": "Starting port number for local Docker WordPress environments. Each site gets a unique port assigned sequentially."

@@ -28,7 +28,7 @@ function resolveLocalPath(domain: string, configManager: ConfigManager): string 
   if (configured) {
     return path.join(configured, domain);
   }
-  return path.join(os.homedir(), 'localwp-sites', domain);
+  return path.join(os.homedir(), 'localdock-sites', domain);
 }
 
 export async function pullSite(
@@ -154,7 +154,7 @@ export async function pullSite(
       'Dismiss'
     );
     if (choice === 'Start Local Environment') {
-      vscode.commands.executeCommand('localwpCpanel.startLocal', new SiteTreeItem(finishedSite));
+      vscode.commands.executeCommand('localdockCpanel.startLocal', new SiteTreeItem(finishedSite));
     }
 
   } catch (err) {

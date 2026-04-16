@@ -6,7 +6,7 @@ class Logger {
   private channel: vscode.OutputChannel | undefined;
 
   initialize(_context: vscode.ExtensionContext): void {
-    this.channel = vscode.window.createOutputChannel('LocalWP cPanel');
+    this.channel = vscode.window.createOutputChannel('LocalDock cPanel');
   }
 
   show(): void {
