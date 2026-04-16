@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs/promises';
 import { logger } from './utils/logger';
 import { ConfigManager } from './utils/configManager';
 import { CredentialManager } from './auth/CredentialManager';
@@ -21,12 +22,16 @@ import { refreshSites } from './commands/refreshSites';
 import { pullSite } from './commands/pullSite';
 import { pushSite } from './commands/pushSite';
 import { diffSite } from './commands/diffSite';
+import { checkRemoteDiff } from './commands/checkRemoteDiff';
 import { openSiteFolder } from './commands/openSiteFolder';
 import { startLocal } from './commands/startLocal';
 import { stopLocal } from './commands/stopLocal';
 import { openLocalSite } from './commands/openLocalSite';
 
-export function activate(context: vscode.ExtensionContext): void {
+let _registry: SiteRegistry | undefined;
+let _dockerManager: DockerManager | undefined;
+
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   logger.initialize(context);
   logger.info('LocalDock for cPanel activating…');
 
@@ -37,14 +42,42 @@ export function activate(context: vscode.ExtensionContext): void {
   const activityManager = new ActivityManager();
   const dockerManager = new DockerManager(configManager);
 
+  _registry = registry;
+  _dockerManager = dockerManager;
+
   const serverTreeProvider = new ServerTreeProvider(registry);
   const siteTreeProvider = new SiteTreeProvider(registry, credManager, configManager);
   const activityTreeProvider = new ActivityTreeProvider(activityManager);
   const localDockerTreeProvider = new LocalDockerTreeProvider(dockerManager, registry, configManager);
 
-  // Reset any stale pulling/pushing/starting/stopping states from previous session
+  // Reset stale states and validate local paths on startup
   for (const site of registry.getAllSites()) {
     const s = site.syncState.status;
+
+    // If files were deleted outside the extension, reset to not_pulled
+    if (site.localPath && (s === 'pulled' || s === 'modified' || s === 'error' || s === 'pulling' || s === 'pushing')) {
+      let pathExists = false;
+      try { await fs.access(site.localPath); pathExists = true; } catch { /* deleted */ }
+      if (!pathExists) {
+        await registry.updateSite({
+          ...site,
+          localPath: undefined,
+          localEnv: undefined,
+          syncState: { status: 'not_pulled' },
+        });
+        continue;
+      }
+    }
+
+    // Reconcile Docker running state against actual container status
+    if (site.localEnv?.status === 'running' && site.localPath) {
+      const actual = await dockerManager.getStatus(site.localPath).catch(() => 'stopped' as const);
+      if (actual !== 'running') {
+        await registry.updateSite({ ...site, localEnv: { status: 'stopped' } });
+      }
+    }
+
+    // Reset in-progress states that were interrupted
     if (s === 'pulling' || s === 'pushing') {
       siteTreeProvider.updateSiteState({
         ...site,
@@ -59,6 +92,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }).catch(() => {});
     }
   }
+
 
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('localdockCpanel.serverTree', serverTreeProvider),
@@ -98,6 +132,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('localdockCpanel.diffSite', (item: SiteTreeItem) =>
       diffSite(item, siteTreeProvider, configManager)
+    ),
+
+    vscode.commands.registerCommand('localdockCpanel.checkRemoteDiff', (item: SiteTreeItem) =>
+      checkRemoteDiff(item, registry, credManager, activityManager, configManager)
     ),
 
     vscode.commands.registerCommand('localdockCpanel.openSiteFolder', (item: SiteTreeItem) =>
@@ -142,6 +180,12 @@ export function activate(context: vscode.ExtensionContext): void {
   logger.info('LocalDock for cPanel activated.');
 }
 
-export function deactivate(): void {
-  logger.info('LocalDock for cPanel deactivated.');
+export async function deactivate(): Promise<void> {
+  logger.info('LocalDock for cPanel deactivating.');
+  if (_registry && _dockerManager) {
+    const running = _registry.getAllSites().filter(
+      (s) => s.localEnv?.status === 'running' && s.localPath
+    );
+    await Promise.allSettled(running.map((s) => _dockerManager!.stop(s.localPath!)));
+  }
 }

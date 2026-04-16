@@ -66,6 +66,12 @@
         "category": "LocalDock cPanel"
       },
       {
+        "command": "localdockCpanel.checkRemoteDiff",
+        "title": "Check Remote for Changes",
+        "icon": "$(cloud)",
+        "category": "LocalDock cPanel"
+      },
+      {
         "command": "localdockCpanel.openSiteFolder",
         "title": "Open Site Folder",
         "icon": "$(folder-opened)",
@@ -179,6 +185,11 @@
           "command": "localdockCpanel.diffSite",
           "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "sync@3"
+        },
+        {
+          "command": "localdockCpanel.checkRemoteDiff",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
+          "group": "sync@4"
         },
         {
           "command": "localdockCpanel.openSiteFolder",

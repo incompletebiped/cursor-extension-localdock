@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 
-export type OperationType = 'pull' | 'push' | 'start-local' | 'stop-local';
+export type OperationType = 'pull' | 'push' | 'start-local' | 'stop-local' | 'check-remote';
 export type OperationStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface Operation {

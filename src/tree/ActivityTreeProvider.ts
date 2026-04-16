@@ -1,19 +1,34 @@
 import * as vscode from 'vscode';
 import { ActivityManager, Operation } from '../ActivityManager';
 
+const TYPE_LABEL: Record<string, string> = {
+  pull: '↓ Pull',
+  push: '↑ Push',
+  'start-local': '▶ Start Local',
+  'stop-local': '■ Stop Local',
+  'check-remote': '☁ Check Remote',
+};
+
 class RunningItem extends vscode.TreeItem {
   constructor(public readonly op: Operation) {
-    super(op.domain, vscode.TreeItemCollapsibleState.None);
+    super(op.domain, vscode.TreeItemCollapsibleState.Expanded);
     this.contextValue = 'runningOperation';
     this.iconPath = new vscode.ThemeIcon('loading~spin');
-    const typeLabel = { pull: '↓ Pull', push: '↑ Push', 'start-local': '▶ Start Local', 'stop-local': '■ Stop Local' }[op.type] ?? op.type;
-    this.description = `${typeLabel} ${op.progress}% — ${op.message}`;
+    this.description = TYPE_LABEL[op.type] ?? op.type;
     this.tooltip = [
-      `${typeLabel} ${op.domain}`,
+      `${TYPE_LABEL[op.type] ?? op.type}  ${op.domain}`,
       `Progress: ${op.progress}%`,
       `Status: ${op.message}`,
       `Started: ${op.startedAt.toLocaleTimeString()}`,
     ].join('\n');
+  }
+}
+
+class RunningProgressItem extends vscode.TreeItem {
+  constructor(public readonly op: Operation) {
+    super(`${op.progress}%  ${op.message}`, vscode.TreeItemCollapsibleState.None);
+    this.contextValue = 'operationProgress';
+    this.iconPath = new vscode.ThemeIcon('circle-outline');
   }
 }
 
@@ -22,7 +37,7 @@ class HistoryItem extends vscode.TreeItem {
     super(op.domain, vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'completedOperation';
 
-    const typeLabel = { pull: '↓ Pull', push: '↑ Push', 'start-local': '▶ Start Local', 'stop-local': '■ Stop Local' }[op.type] ?? op.type;
+    const typeLabel = TYPE_LABEL[op.type] ?? op.type;
     const duration = op.finishedAt
       ? Math.round((op.finishedAt.getTime() - op.startedAt.getTime()) / 1000)
       : 0;
@@ -44,19 +59,12 @@ class HistoryItem extends vscode.TreeItem {
 
     this.tooltip = [
       `${op.domain}`,
-      `Operation: ${op.type}`,
+      `Operation: ${typeLabel}`,
       `Status: ${op.status}`,
       op.error ? `Error: ${op.error}` : '',
       `Started: ${op.startedAt.toLocaleTimeString()}`,
       op.finishedAt ? `Finished: ${op.finishedAt.toLocaleTimeString()} (${duration}s)` : '',
     ].filter(Boolean).join('\n');
-  }
-}
-
-class SectionHeader extends vscode.TreeItem {
-  constructor(label: string) {
-    super(label, vscode.TreeItemCollapsibleState.None);
-    this.contextValue = 'sectionHeader';
   }
 }
 
@@ -68,7 +76,7 @@ class EmptyItem extends vscode.TreeItem {
   }
 }
 
-type ActivityNode = RunningItem | HistoryItem | SectionHeader | EmptyItem;
+type ActivityNode = RunningItem | RunningProgressItem | HistoryItem | EmptyItem;
 
 export class ActivityTreeProvider implements vscode.TreeDataProvider<ActivityNode> {
   private _onDidChangeTreeData = new vscode.EventEmitter<ActivityNode | undefined | void>();
@@ -82,27 +90,28 @@ export class ActivityTreeProvider implements vscode.TreeDataProvider<ActivityNod
     return element;
   }
 
-  getChildren(_element?: ActivityNode): ActivityNode[] {
+  getChildren(element?: ActivityNode): ActivityNode[] {
+    if (element instanceof RunningItem) {
+      return [new RunningProgressItem(element.op)];
+    }
+
+    if (element) {
+      return [];
+    }
+
     const running = this.manager.getRunning();
     const history = this.manager.getHistory();
-    const nodes: ActivityNode[] = [];
 
     if (running.length === 0 && history.length === 0) {
       return [new EmptyItem('No activity yet.')];
     }
 
-    if (running.length > 0) {
-      nodes.push(...running.map(op => new RunningItem(op)));
-    }
-
-    if (history.length > 0) {
-      nodes.push(...history.map(op => new HistoryItem(op)));
-    }
-
-    return nodes;
+    return [
+      ...running.map((op) => new RunningItem(op)),
+      ...history.map((op) => new HistoryItem(op)),
+    ];
   }
 
-  /** Expose the operation ID from a tree item for the cancel command */
   getOperationId(item: ActivityNode): string | undefined {
     if (item instanceof RunningItem) {
       return item.op.id;

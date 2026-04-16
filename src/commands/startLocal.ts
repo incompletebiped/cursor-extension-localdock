@@ -68,32 +68,36 @@ export async function startLocal(
     activityManager.update(opId, 10, 'Scaffolding docker-compose.yml…');
 
     // Scaffold compose file
-    await dockerManager.scaffoldComposeFile(site.localPath, site.domain, port, 'wordpress');
+    const { wasCreated: composeWasCreated } = await dockerManager.scaffoldComposeFile(site.localPath, site.domain, port, 'wordpress');
 
     activityManager.update(opId, 20, 'Rewriting database URLs…');
 
-    // Rewrite URLs in db.sql if not yet done
+    // On first start OR when a fresh compose was just created: wipe stale volumes and re-process db.sql
     const sqlPath = path.join(site.localPath, '.localdock', 'db.sql');
     const dbUrlRewritten = manifest?.dbUrlRewritten ?? false;
-    if (!dbUrlRewritten) {
+    if (!dbUrlRewritten || composeWasCreated) {
+      activityManager.update(opId, 22, 'Clearing stale Docker volumes…');
+      await dockerManager.reset(site.localPath);
+
       try {
         await fs.access(sqlPath);
-        // Derive the production URL from the domain
         const productionUrl = `https://${site.domain}`;
         await DatabaseSyncer.rewriteUrlsInDump(sqlPath, productionUrl, localUrl);
-        // Update manifest with rewritten flag
+        await DatabaseSyncer.stripDatabaseStatements(sqlPath);
         const updatedManifest = await readManifest(site.localPath);
         if (updatedManifest) {
           await writeManifest(site.localPath, { ...updatedManifest, localPort: port, dbUrlRewritten: true });
         }
       } catch (err) {
-        // db.sql might not exist — not fatal
-        logger.warn(`[startLocal] Could not rewrite DB URLs: ${err instanceof Error ? err.message : String(err)}`);
+        logger.warn(`[startLocal] Could not process db.sql: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
     activityManager.update(opId, 35, 'Patching wp-config.php…');
-    await dockerManager.patchWpConfig(site.localPath);
+    await dockerManager.patchWpConfig(site.localPath, localUrl);
+
+    activityManager.update(opId, 40, 'Configuring uploads proxy…');
+    await dockerManager.scaffoldUploadsProxy(site.localPath, site.domain);
 
     activityManager.update(opId, 50, 'Starting Docker containers…');
     await dockerManager.start(site.localPath);

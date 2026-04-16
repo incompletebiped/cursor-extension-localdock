@@ -12,7 +12,10 @@
       "Bash(npm run *)",
       "Bash(npx tsc *)",
       "Bash(gh repo *)",
-      "Bash(where gh *)"
+      "Bash(where gh *)",
+      "Skill(update-config)",
+      "Bash(C:\\\\Users\\\\baile\\\\OneDrive\\\\Code_Vault\\\\claude-c2switcher-windows\\\\dist\\\\c2switcher.exe current *)",
+      "Bash(/c/Users/baile/AppData/Local/Programs/Common/c2switcher.exe current *)"
     ]
   }
 }

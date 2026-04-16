@@ -12,12 +12,20 @@ import { sanitizeDbName } from '../utils/pathUtils';
 export class DockerManager {
   constructor(private readonly configManager: ConfigManager) {}
 
-  /** Check that the docker CLI is in PATH. Throws DOCKER_NOT_FOUND if not. */
+  /** Check that Docker CLI is in PATH and the daemon is running. */
   async assertDockerAvailable(): Promise<void> {
     const version = await this.getDockerVersion();
     if (version === null) {
       throw new LocalDockError(
         'Docker Desktop is not installed or not in PATH. Download it from https://www.docker.com/products/docker-desktop',
+        LocalDockErrorCode.DOCKER_NOT_FOUND,
+        false
+      );
+    }
+    const ps = await this.spawnCompose(['ps', '--quiet'], null);
+    if (ps.code !== 0) {
+      throw new LocalDockError(
+        'Docker Desktop is installed but not running. Please open Docker Desktop and wait for it to start, then try again.',
         LocalDockErrorCode.DOCKER_NOT_FOUND,
         false
       );
@@ -60,14 +68,14 @@ export class DockerManager {
 
   /**
    * Scaffold a docker-compose.yml in localPath/.localdock/ if one doesn't exist.
-   * Returns the path to the compose file.
+   * Returns the path to the compose file and whether it was newly created.
    */
   async scaffoldComposeFile(
     localPath: string,
     domain: string,
     port: number,
     dbName: string
-  ): Promise<string> {
+  ): Promise<{ composePath: string; wasCreated: boolean }> {
     const localDockDir = path.join(localPath, '.localdock');
     const composePath = path.join(localDockDir, 'docker-compose.yml');
 
@@ -77,7 +85,7 @@ export class DockerManager {
     try {
       await fs.access(composePath);
       logger.info(`[DockerManager] docker-compose.yml already exists for ${domain}, skipping scaffold`);
-      return composePath;
+      return { composePath, wasCreated: false };
     } catch {
       // File doesn't exist, create it
     }
@@ -87,7 +95,7 @@ export class DockerManager {
 
     await fs.writeFile(composePath, content, 'utf-8');
     logger.info(`[DockerManager] Scaffolded docker-compose.yml for ${domain} on port ${port}`);
-    return composePath;
+    return { composePath, wasCreated: true };
   }
 
   /** Start the Docker Compose stack (docker compose up -d) */
@@ -101,6 +109,12 @@ export class DockerManager {
         true
       );
     }
+  }
+
+  /** Tear down the stack and delete its volumes — forces a clean re-init on next start. */
+  async reset(localPath: string): Promise<void> {
+    logger.info(`[DockerManager] Resetting environment at ${localPath}`);
+    await this.spawnCompose(['down', '--volumes', '--remove-orphans'], localPath);
   }
 
   /** Stop the Docker Compose stack (docker compose down) */
@@ -170,11 +184,10 @@ export class DockerManager {
    * Backs up to .localdock/wp-config.docker.bak before modifying.
    * Idempotent — skips if backup already exists.
    */
-  async patchWpConfig(localPath: string): Promise<void> {
+  async patchWpConfig(localPath: string, localUrl: string): Promise<void> {
     const wpConfigPath = path.join(localPath, 'wp-config.php');
     const backupPath = path.join(localPath, '.localdock', 'wp-config.docker.bak');
 
-    // Check if we already patched (backup exists)
     try {
       await fs.access(backupPath);
       logger.info(`[DockerManager] wp-config.php already patched for ${localPath}`);
@@ -191,20 +204,28 @@ export class DockerManager {
       return;
     }
 
-    // Save backup
     await fs.writeFile(backupPath, content, 'utf-8');
 
-    // Replace DB connection constants
     const replacements: Array<[RegExp, string]> = [
-      [/define\s*\(\s*['"]DB_HOST['"]\s*,\s*['"][^'"]*['"]\s*\)/g, `define( 'DB_HOST', 'db' )`],
-      [/define\s*\(\s*['"]DB_USER['"]\s*,\s*['"][^'"]*['"]\s*\)/g, `define( 'DB_USER', 'wordpress' )`],
+      [/define\s*\(\s*['"]DB_HOST['"]\s*,\s*['"][^'"]*['"]\s*\)/g,     `define( 'DB_HOST', 'db' )`],
+      [/define\s*\(\s*['"]DB_USER['"]\s*,\s*['"][^'"]*['"]\s*\)/g,     `define( 'DB_USER', 'wordpress' )`],
       [/define\s*\(\s*['"]DB_PASSWORD['"]\s*,\s*['"][^'"]*['"]\s*\)/g, `define( 'DB_PASSWORD', 'wordpress' )`],
-      [/define\s*\(\s*['"]DB_NAME['"]\s*,\s*['"][^'"]*['"]\s*\)/g, `define( 'DB_NAME', 'wordpress' )`],
+      [/define\s*\(\s*['"]DB_NAME['"]\s*,\s*['"][^'"]*['"]\s*\)/g,     `define( 'DB_NAME', 'wordpress' )`],
+      [/define\s*\(\s*['"]WP_HOME['"]\s*,\s*['"][^'"]*['"]\s*\)/g,     `define( 'WP_HOME', '${localUrl}' )`],
+      [/define\s*\(\s*['"]WP_SITEURL['"]\s*,\s*['"][^'"]*['"]\s*\)/g, `define( 'WP_SITEURL', '${localUrl}' )`],
     ];
 
     let patched = content;
     for (const [pattern, replacement] of replacements) {
       patched = patched.replace(pattern, replacement);
+    }
+
+    // Inject WP_HOME / WP_SITEURL if they weren't already in the file
+    if (!/define\s*\(\s*['"]WP_HOME['"]/i.test(content)) {
+      patched = patched.replace(
+        /(\/\*\s*That'?s all[^*]*\*\/)/i,
+        `define( 'WP_HOME', '${localUrl}' );\ndefine( 'WP_SITEURL', '${localUrl}' );\n\n$1`
+      );
     }
 
     if (patched === content) {
@@ -214,6 +235,28 @@ export class DockerManager {
 
     await fs.writeFile(wpConfigPath, patched, 'utf-8');
     logger.info(`[DockerManager] Patched wp-config.php for Docker`);
+  }
+
+  /**
+   * Create wp-content/uploads/.htaccess so Apache redirects requests for
+   * missing upload files to the production server. This avoids having to
+   * download gigabytes of media just for local development.
+   * Idempotent — overwrites on every start so the production URL stays current.
+   */
+  async scaffoldUploadsProxy(localPath: string, domain: string): Promise<void> {
+    const uploadsDir = path.join(localPath, 'wp-content', 'uploads');
+    const htaccessPath = path.join(uploadsDir, '.htaccess');
+
+    await fs.mkdir(uploadsDir, { recursive: true });
+
+    const content = `<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^(.*)$ https://${domain}/wp-content/uploads/$1 [R=302,L]
+</IfModule>
+`;
+    await fs.writeFile(htaccessPath, content, 'utf-8');
+    logger.info(`[DockerManager] Wrote uploads proxy .htaccess for ${domain}`);
   }
 
   // ---------------------------------------------------------------------------
@@ -232,7 +275,7 @@ export class DockerManager {
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
     volumes:
-      - ../:/var/www/html
+      - .:/var/www/html
     depends_on:
       db:
         condition: service_healthy
@@ -247,7 +290,7 @@ export class DockerManager {
       MYSQL_PASSWORD: wordpress
     volumes:
       - ${safeVolumeName}_db:/var/lib/mysql
-      - ./db.sql:/docker-entrypoint-initdb.d/db.sql:ro
+      - ./.localdock/db.sql:/docker-entrypoint-initdb.d/db.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s

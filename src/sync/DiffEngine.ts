@@ -72,6 +72,36 @@ export class DiffEngine {
     return { added, modified, deleted };
   }
 
+  /** Compare a live remote file listing against the stored manifest (size+mtime, no download needed). */
+  computeRemoteChanges(
+    remoteFiles: Array<{ relativePath: string; size: number; mtime: number }>,
+    manifest: SiteManifest
+  ): DiffResult {
+    const added: string[] = [];
+    const modified: string[] = [];
+    const deleted: string[] = [];
+
+    const remoteMap = new Map(remoteFiles.map((f) => [f.relativePath, f]));
+
+    for (const [relPath, remote] of remoteMap) {
+      const entry = manifest.fileIndex[relPath];
+      if (!entry) {
+        added.push(relPath);
+      } else if (remote.size !== entry.size || remote.mtime !== entry.mtime) {
+        modified.push(relPath);
+      }
+    }
+
+    for (const manifestPath of Object.keys(manifest.fileIndex)) {
+      if (!remoteMap.has(manifestPath)) {
+        deleted.push(manifestPath);
+      }
+    }
+
+    logger.info(`[DiffEngine] Remote diff: +${added.length} ~${modified.length} -${deleted.length}`);
+    return { added, modified, deleted };
+  }
+
   hasChanges(diff: DiffResult): boolean {
     return diff.added.length > 0 || diff.modified.length > 0 || diff.deleted.length > 0;
   }

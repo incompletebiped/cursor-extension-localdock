@@ -233,6 +233,36 @@ export class DatabaseSyncer {
     logger.info(`[DatabaseSyncer] URL rewrite complete`);
   }
 
+  /**
+   * Strip CREATE DATABASE, DROP DATABASE, and USE statements from a SQL dump so it
+   * imports into whichever database MySQL already has selected (e.g. the Docker default).
+   */
+  static async stripDatabaseStatements(sqlPath: string): Promise<void> {
+    const tmpPath = sqlPath + '.tmp';
+    const inputStream = fsSync.createReadStream(sqlPath, { encoding: 'utf-8' });
+    const outputStream = fsSync.createWriteStream(tmpPath, { encoding: 'utf-8' });
+    const rl = readline.createInterface({ input: inputStream, crlfDelay: Infinity });
+
+    await new Promise<void>((resolve, reject) => {
+      outputStream.on('error', reject);
+      rl.on('error', reject);
+      rl.on('line', (line) => {
+        const t = line.trimStart();
+        if (
+          /^CREATE\s+DATABASE\b/i.test(t) ||
+          /^DROP\s+DATABASE\b/i.test(t) ||
+          /^USE\s+`[^`]+`\s*;/i.test(t)
+        ) { return; }
+        outputStream.write(line + '\n');
+      });
+      rl.on('close', () => outputStream.end());
+      outputStream.on('finish', resolve);
+    });
+
+    await fs.rename(tmpPath, sqlPath);
+    logger.info('[DatabaseSyncer] Stripped database statements from dump');
+  }
+
   /** Split a DB_HOST value that may contain an embedded port (e.g. "localhost:3306") */
   private parseDbHost(dbHost: string): { host: string; port: string } {
     // Guard against IPv6 addresses like "[::1]:3306"

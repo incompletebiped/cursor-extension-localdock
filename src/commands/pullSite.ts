@@ -53,7 +53,7 @@ export async function pullSite(
     return;
   }
 
-  const localPath = resolveLocalPath(site.domain, configManager);
+  const localPath = site.localPath ?? resolveLocalPath(site.domain, configManager);
   const { id: opId, token } = activityManager.start(site.domain, site.serverId, 'pull');
 
   const updatedSite: WordPressSite = {
