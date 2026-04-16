@@ -10,7 +10,9 @@
       "Bash(npm view *)",
       "Bash(npm install *)",
       "Bash(npm run *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(gh repo *)",
+      "Bash(where gh *)"
     ]
   }
 }
