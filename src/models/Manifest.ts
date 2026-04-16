@@ -14,4 +14,6 @@ export interface SiteManifest {
   dbName: string;
   dbLocalName: string;
   fileIndex: Record<string, ManifestFileEntry>;
+  localPort?: number;
+  dbUrlRewritten?: boolean;
 }

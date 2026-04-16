@@ -6,9 +6,10 @@ class RunningItem extends vscode.TreeItem {
     super(op.domain, vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'runningOperation';
     this.iconPath = new vscode.ThemeIcon('loading~spin');
-    this.description = `${op.type === 'pull' ? '↓ Pull' : '↑ Push'} ${op.progress}% — ${op.message}`;
+    const typeLabel = { pull: '↓ Pull', push: '↑ Push', 'start-local': '▶ Start Local', 'stop-local': '■ Stop Local' }[op.type] ?? op.type;
+    this.description = `${typeLabel} ${op.progress}% — ${op.message}`;
     this.tooltip = [
-      `${op.type === 'pull' ? 'Pulling' : 'Pushing'} ${op.domain}`,
+      `${typeLabel} ${op.domain}`,
       `Progress: ${op.progress}%`,
       `Status: ${op.message}`,
       `Started: ${op.startedAt.toLocaleTimeString()}`,
@@ -21,7 +22,7 @@ class HistoryItem extends vscode.TreeItem {
     super(op.domain, vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'completedOperation';
 
-    const typeLabel = op.type === 'pull' ? '↓ Pull' : '↑ Push';
+    const typeLabel = { pull: '↓ Pull', push: '↑ Push', 'start-local': '▶ Start Local', 'stop-local': '■ Stop Local' }[op.type] ?? op.type;
     const duration = op.finishedAt
       ? Math.round((op.finishedAt.getTime() - op.startedAt.getTime()) / 1000)
       : 0;

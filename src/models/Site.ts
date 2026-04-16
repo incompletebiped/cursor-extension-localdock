@@ -1,4 +1,5 @@
 import { SyncState } from './SyncState';
+import { LocalEnvState } from './LocalEnvState';
 
 export interface WordPressSite {
   id: string;
@@ -12,5 +13,6 @@ export interface WordPressSite {
   dbPass: string;
   localPath?: string;
   syncState: SyncState;
+  localEnv?: LocalEnvState;
   detectedAt: string;
 }

@@ -76,6 +76,30 @@
         "title": "Cancel Operation",
         "icon": "$(stop-circle)",
         "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.startLocal",
+        "title": "Start Local WordPress",
+        "icon": "$(play)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.stopLocal",
+        "title": "Stop Local WordPress",
+        "icon": "$(debug-stop)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.openLocalSite",
+        "title": "Open in Browser",
+        "icon": "$(browser)",
+        "category": "LocalWP cPanel"
+      },
+      {
+        "command": "localwpCpanel.openDockerSetup",
+        "title": "Install Docker Desktop",
+        "icon": "$(link-external)",
+        "category": "LocalWP cPanel"
       }
     ],
     "viewsContainers": {
@@ -100,6 +124,10 @@
         {
           "id": "localwpCpanel.activityTree",
           "name": "Activity"
+        },
+        {
+          "id": "localwpCpanel.localDockerTree",
+          "name": "Local Environments"
         }
       ]
     },
@@ -139,23 +167,73 @@
         },
         {
           "command": "localwpCpanel.pullSite",
-          "when": "view == localwpCpanel.siteTree && viewItem == wordpressSite",
+          "when": "view == localwpCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "sync@1"
         },
         {
           "command": "localwpCpanel.pushSite",
-          "when": "view == localwpCpanel.siteTree && viewItem == wordpressSite",
+          "when": "view == localwpCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "sync@2"
         },
         {
           "command": "localwpCpanel.diffSite",
-          "when": "view == localwpCpanel.siteTree && viewItem == wordpressSite",
+          "when": "view == localwpCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "sync@3"
         },
         {
           "command": "localwpCpanel.openSiteFolder",
-          "when": "view == localwpCpanel.siteTree && viewItem == wordpressSite",
+          "when": "view == localwpCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "open@1"
+        },
+        {
+          "command": "localwpCpanel.startLocal",
+          "when": "view == localwpCpanel.siteTree && viewItem =~ /localEnv_(stopped|error)/",
+          "group": "local@1"
+        },
+        {
+          "command": "localwpCpanel.startLocal",
+          "when": "view == localwpCpanel.siteTree && viewItem =~ /localEnv_(stopped|error)/",
+          "group": "inline"
+        },
+        {
+          "command": "localwpCpanel.stopLocal",
+          "when": "view == localwpCpanel.siteTree && viewItem =~ /localEnv_running/",
+          "group": "local@1"
+        },
+        {
+          "command": "localwpCpanel.stopLocal",
+          "when": "view == localwpCpanel.siteTree && viewItem =~ /localEnv_running/",
+          "group": "inline"
+        },
+        {
+          "command": "localwpCpanel.openLocalSite",
+          "when": "view == localwpCpanel.siteTree && viewItem =~ /localEnv_running/",
+          "group": "local@2"
+        },
+        {
+          "command": "localwpCpanel.startLocal",
+          "when": "view == localwpCpanel.localDockerTree && viewItem =~ /localEnv_(stopped|error)/",
+          "group": "local@1"
+        },
+        {
+          "command": "localwpCpanel.startLocal",
+          "when": "view == localwpCpanel.localDockerTree && viewItem =~ /localEnv_(stopped|error)/",
+          "group": "inline"
+        },
+        {
+          "command": "localwpCpanel.stopLocal",
+          "when": "view == localwpCpanel.localDockerTree && viewItem =~ /localEnv_running/",
+          "group": "local@1"
+        },
+        {
+          "command": "localwpCpanel.stopLocal",
+          "when": "view == localwpCpanel.localDockerTree && viewItem =~ /localEnv_running/",
+          "group": "inline"
+        },
+        {
+          "command": "localwpCpanel.openLocalSite",
+          "when": "view == localwpCpanel.localDockerTree && viewItem =~ /localEnv_running/",
+          "group": "local@2"
         },
         {
           "command": "localwpCpanel.cancelOperation",
@@ -220,6 +298,11 @@
           "type": "number",
           "default": 5,
           "description": "Maximum concurrent SFTP file transfers."
+        },
+        "localwpCpanel.dockerStartPort": {
+          "type": "number",
+          "default": 8080,
+          "description": "Starting port number for local Docker WordPress environments. Each site gets a unique port assigned sequentially."
         }
       }
     }

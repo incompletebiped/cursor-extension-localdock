@@ -8,8 +8,11 @@ import { ActivityManager } from './ActivityManager';
 import { ServerTreeProvider } from './tree/ServerTreeProvider';
 import { SiteTreeProvider } from './tree/SiteTreeProvider';
 import { ActivityTreeProvider } from './tree/ActivityTreeProvider';
+import { LocalDockerTreeProvider } from './tree/LocalDockerTreeProvider';
 import { SiteTreeItem } from './tree/SiteTreeItem';
+import { LocalEnvItem } from './tree/LocalDockerTreeProvider';
 import { ServerTreeItem } from './tree/ServerTreeProvider';
+import { DockerManager } from './docker/DockerManager';
 import { addServer } from './commands/addServer';
 import { editServer } from './commands/editServer';
 import { testConnection } from './commands/testConnection';
@@ -19,6 +22,9 @@ import { pullSite } from './commands/pullSite';
 import { pushSite } from './commands/pushSite';
 import { diffSite } from './commands/diffSite';
 import { openSiteFolder } from './commands/openSiteFolder';
+import { startLocal } from './commands/startLocal';
+import { stopLocal } from './commands/stopLocal';
+import { openLocalSite } from './commands/openLocalSite';
 
 export function activate(context: vscode.ExtensionContext): void {
   logger.initialize(context);
@@ -29,12 +35,14 @@ export function activate(context: vscode.ExtensionContext): void {
   const authProvider = new AuthProvider();
   const registry = new SiteRegistry(context);
   const activityManager = new ActivityManager();
+  const dockerManager = new DockerManager(configManager);
 
   const serverTreeProvider = new ServerTreeProvider(registry);
   const siteTreeProvider = new SiteTreeProvider(registry, credManager, configManager);
   const activityTreeProvider = new ActivityTreeProvider(activityManager);
+  const localDockerTreeProvider = new LocalDockerTreeProvider(dockerManager, registry, configManager);
 
-  // Reset any stale pulling/pushing states left from a previous session
+  // Reset any stale pulling/pushing/starting/stopping states from previous session
   for (const site of registry.getAllSites()) {
     const s = site.syncState.status;
     if (s === 'pulling' || s === 'pushing') {
@@ -43,12 +51,20 @@ export function activate(context: vscode.ExtensionContext): void {
         syncState: { status: 'not_pulled' },
       }).catch(() => {});
     }
+    const ls = site.localEnv?.status;
+    if (ls === 'starting' || ls === 'stopping') {
+      registry.updateSite({
+        ...site,
+        localEnv: { ...site.localEnv, status: 'stopped' },
+      }).catch(() => {});
+    }
   }
 
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('localwpCpanel.serverTree', serverTreeProvider),
     vscode.window.registerTreeDataProvider('localwpCpanel.siteTree', siteTreeProvider),
-    vscode.window.registerTreeDataProvider('localwpCpanel.activityTree', activityTreeProvider)
+    vscode.window.registerTreeDataProvider('localwpCpanel.activityTree', activityTreeProvider),
+    vscode.window.registerTreeDataProvider('localwpCpanel.localDockerTree', localDockerTreeProvider)
   );
 
   context.subscriptions.push(
@@ -73,7 +89,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
 
     vscode.commands.registerCommand('localwpCpanel.pullSite', (item: SiteTreeItem) =>
-      pullSite(item, registry, credManager, siteTreeProvider, activityManager, configManager)
+      pullSite(item, registry, credManager, siteTreeProvider, localDockerTreeProvider, activityManager, configManager)
     ),
 
     vscode.commands.registerCommand('localwpCpanel.pushSite', (item: SiteTreeItem) =>
@@ -93,6 +109,23 @@ export function activate(context: vscode.ExtensionContext): void {
       if (opId) {
         activityManager.cancel(opId);
       }
+    }),
+
+    vscode.commands.registerCommand('localwpCpanel.startLocal', (item: SiteTreeItem | LocalEnvItem) =>
+      startLocal(item, registry, siteTreeProvider, localDockerTreeProvider, activityManager, dockerManager)
+    ),
+
+    vscode.commands.registerCommand('localwpCpanel.stopLocal', (item: SiteTreeItem | LocalEnvItem) =>
+      stopLocal(item, registry, siteTreeProvider, localDockerTreeProvider, activityManager, dockerManager)
+    ),
+
+    vscode.commands.registerCommand('localwpCpanel.openLocalSite', (item: SiteTreeItem | LocalEnvItem | { site: import('./models/Site').WordPressSite }) => {
+      const site = 'site' in item ? item.site : (item as SiteTreeItem).site;
+      return openLocalSite(site);
+    }),
+
+    vscode.commands.registerCommand('localwpCpanel.openDockerSetup', () => {
+      vscode.env.openExternal(vscode.Uri.parse('https://www.docker.com/products/docker-desktop'));
     })
   );
 

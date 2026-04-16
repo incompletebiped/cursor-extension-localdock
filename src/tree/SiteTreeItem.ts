@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WordPressSite } from '../models/Site';
 import { SyncStatus } from '../models/SyncState';
+import { LocalEnvStatus } from '../models/LocalEnvState';
 
 // ServerTreeItem lives in ServerTreeProvider.ts — re-export for backwards compat
 export { ServerTreeItem } from './ServerTreeProvider';
@@ -8,9 +9,10 @@ export { ServerTreeItem } from './ServerTreeProvider';
 export class SiteTreeItem extends vscode.TreeItem {
   constructor(public readonly site: WordPressSite) {
     super(site.domain, vscode.TreeItemCollapsibleState.None);
-    this.contextValue = 'wordpressSite';
+    const localStatus = site.localEnv?.status ?? 'stopped';
+    this.contextValue = `wordpressSite localEnv_${localStatus}`;
     this.iconPath = iconForStatus(site.syncState.status);
-    this.description = descriptionForStatus(site.syncState);
+    this.description = buildDescription(site);
     this.tooltip = buildTooltip(site);
   }
 }
@@ -59,6 +61,37 @@ function iconForStatus(status: SyncStatus): vscode.ThemeIcon {
   }
 }
 
+function buildDescription(site: WordPressSite): string {
+  const syncPart = descriptionForStatus(site.syncState);
+  const localEnv = site.localEnv;
+
+  if (!localEnv) { return syncPart; }
+
+  let localPart = '';
+  switch (localEnv.status) {
+    case 'running':
+      localPart = localEnv.port ? `  ▶ :${localEnv.port}` : '  ▶ Running';
+      break;
+    case 'starting':
+      localPart = '  ↻ Starting…';
+      break;
+    case 'stopping':
+      localPart = '  ↻ Stopping…';
+      break;
+    case 'error':
+      localPart = '  ⚠ Local error';
+      break;
+    case 'stopped':
+      // Only show "stopped" if it was previously initialized (has a port)
+      if (localEnv.port) {
+        localPart = '  ◼ Stopped';
+      }
+      break;
+  }
+
+  return syncPart + localPart;
+}
+
 function descriptionForStatus(state: WordPressSite['syncState']): string {
   switch (state.status) {
     case 'pulling':
@@ -100,6 +133,22 @@ function buildTooltip(site: WordPressSite): string {
   }
   if (site.syncState.lastError) {
     lines.push(`Error: ${site.syncState.lastError}`);
+  }
+  if (site.localEnv) {
+    const statusLabel: Record<LocalEnvStatus, string> = {
+      stopped: '◼ Stopped',
+      starting: '↻ Starting…',
+      running: '▶ Running',
+      stopping: '↻ Stopping…',
+      error: '⚠ Error',
+    };
+    lines.push(`Local Docker: ${statusLabel[site.localEnv.status]}`);
+    if (site.localEnv.url) {
+      lines.push(`URL: ${site.localEnv.url}`);
+    }
+    if (site.localEnv.lastError) {
+      lines.push(`Local Error: ${site.localEnv.lastError}`);
+    }
   }
   return lines.join('\n');
 }

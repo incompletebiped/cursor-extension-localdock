@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { SiteTreeItem } from '../tree/SiteTreeItem';
 import { SiteTreeProvider } from '../tree/SiteTreeProvider';
+import { LocalDockerTreeProvider } from '../tree/LocalDockerTreeProvider';
 import { ActivityManager } from '../ActivityManager';
 import { CredentialManager } from '../auth/CredentialManager';
 import { ConfigManager } from '../utils/configManager';
@@ -35,6 +36,7 @@ export async function pullSite(
   registry: SiteRegistry,
   credManager: CredentialManager,
   siteTreeProvider: SiteTreeProvider,
+  localDockerTreeProvider: LocalDockerTreeProvider,
   activityManager: ActivityManager,
   configManager: ConfigManager
 ): Promise<void> {
@@ -142,11 +144,18 @@ export async function pullSite(
       syncState: { status: 'pulled', lastPulledAt: new Date().toISOString() },
     };
     await siteTreeProvider.updateSiteState(finishedSite);
+    localDockerTreeProvider.refresh();
 
-    vscode.window.showInformationMessage(
-      `Pulled ${site.domain} — ${totalFiles} files downloaded.`
-    );
     logger.info(`[pullSite] Complete: ${site.domain}`);
+
+    const choice = await vscode.window.showInformationMessage(
+      `Pulled ${site.domain} — ${totalFiles} files downloaded.`,
+      'Start Local Environment',
+      'Dismiss'
+    );
+    if (choice === 'Start Local Environment') {
+      vscode.commands.executeCommand('localwpCpanel.startLocal', new SiteTreeItem(finishedSite));
+    }
 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 
-export type OperationType = 'pull' | 'push';
+export type OperationType = 'pull' | 'push' | 'start-local' | 'stop-local';
 export type OperationStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface Operation {
@@ -33,7 +33,7 @@ export class ActivityManager {
       id, domain, serverId, type,
       status: 'running',
       progress: 0,
-      message: type === 'pull' ? 'Starting pull…' : 'Starting push…',
+      message: type === 'pull' ? 'Starting pull…' : type === 'push' ? 'Starting push…' : type === 'start-local' ? 'Starting local environment…' : 'Stopping local environment…',
       startedAt: new Date(),
     };
     this.running.set(id, { op, tokenSource });

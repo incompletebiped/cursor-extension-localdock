@@ -50,4 +50,8 @@ export class ConfigManager {
   get maxConcurrentTransfers(): number {
     return this.config.get<number>('maxConcurrentTransfers', 5);
   }
+
+  get dockerStartPort(): number {
+    return this.config.get<number>('dockerStartPort', 8080);
+  }
 }
