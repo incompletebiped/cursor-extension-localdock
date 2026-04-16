@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import { CpanelServer } from './models/Server';
 import { WordPressSite } from './models/Site';
 
-const SERVERS_KEY = 'localwp.servers';
-const SITES_KEY_PREFIX = 'localwp.sites.';
+const SERVERS_KEY = 'localdock.servers';
+const SITES_KEY_PREFIX = 'localdock.sites.';
 
 export class SiteRegistry {
   constructor(private readonly context: vscode.ExtensionContext) {}

@@ -4,12 +4,12 @@ import * as path from 'path';
 
 export class ConfigManager {
   private get config(): vscode.WorkspaceConfiguration {
-    return vscode.workspace.getConfiguration('localwpCpanel');
+    return vscode.workspace.getConfiguration('localdockCpanel');
   }
 
   get localSitesDirectory(): string {
     const dir = this.config.get<string>('localSitesDirectory', '');
-    return dir || path.join(os.homedir(), 'localwp-sites');
+    return dir || path.join(os.homedir(), 'localdock-sites');
   }
 
   get localMysqlHost(): string {

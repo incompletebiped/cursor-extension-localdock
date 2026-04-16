@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import { StoredCredentials, ResolvedCredentials } from '../models/Credentials';
 
-const SECRET_KEY_PREFIX = 'localwp.creds.';
-const LOCAL_MYSQL_PASSWORD_KEY = 'localwp.localMysqlPassword';
+const SECRET_KEY_PREFIX = 'localdock.creds.';
+const LOCAL_MYSQL_PASSWORD_KEY = 'localdock.localMysqlPassword';
 
 export class CredentialManager {
   constructor(private readonly context: vscode.ExtensionContext) {}

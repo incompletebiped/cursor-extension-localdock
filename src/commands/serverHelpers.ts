@@ -75,7 +75,7 @@ export async function testConnectionWithFallback(
         `• Network connectivity issue`;
     } else {
       detail = err.message;
-      hint = `Check the Output panel (LocalWP cPanel) for full details.`;
+      hint = `Check the Output panel (LocalDock cPanel) for full details.`;
     }
 
     const buttons: string[] = ['Save Anyway', 'Skip & Save'];

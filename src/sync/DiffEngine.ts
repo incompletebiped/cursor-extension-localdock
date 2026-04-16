@@ -19,7 +19,7 @@ export class DiffEngine {
   ): Promise<DiffResult> {
     const localFiles = await walkDir(localBase, localBase, [
       ...excludePatterns,
-      '.localwp',
+      '.localdock',
     ]);
 
     const added: string[] = [];
