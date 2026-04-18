@@ -34,7 +34,7 @@ export async function diffSite(
     const diff = await engine.computeLocalChanges(
       site.localPath,
       manifest,
-      configManager.excludePatterns
+      configManager.pushExcludePatterns
     );
 
     if (!engine.hasChanges(diff)) {

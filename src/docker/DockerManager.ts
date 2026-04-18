@@ -188,23 +188,23 @@ export class DockerManager {
     const wpConfigPath = path.join(localPath, 'wp-config.php');
     const backupPath = path.join(localPath, '.localdock', 'wp-config.docker.bak');
 
+    // Always derive the patched file from the backup (original production copy).
+    // This ensures WP_HOME/WP_SITEURL always reflect the current port, even if it
+    // changed between starts. On the first run there is no backup yet, so we create
+    // it from the live file and then patch from it.
+    let original: string;
     try {
-      await fs.access(backupPath);
-      logger.info(`[DockerManager] wp-config.php already patched for ${localPath}`);
-      return;
+      original = await fs.readFile(backupPath, 'utf-8');
     } catch {
-      // No backup yet, proceed
+      // No backup — create one from the current wp-config.php
+      try {
+        original = await fs.readFile(wpConfigPath, 'utf-8');
+      } catch {
+        logger.warn(`[DockerManager] wp-config.php not found at ${wpConfigPath}, skipping patch`);
+        return;
+      }
+      await fs.writeFile(backupPath, original, 'utf-8');
     }
-
-    let content: string;
-    try {
-      content = await fs.readFile(wpConfigPath, 'utf-8');
-    } catch {
-      logger.warn(`[DockerManager] wp-config.php not found at ${wpConfigPath}, skipping patch`);
-      return;
-    }
-
-    await fs.writeFile(backupPath, content, 'utf-8');
 
     const replacements: Array<[RegExp, string]> = [
       [/define\s*\(\s*['"]DB_HOST['"]\s*,\s*['"][^'"]*['"]\s*\)/g,     `define( 'DB_HOST', 'db' )`],
@@ -215,26 +215,74 @@ export class DockerManager {
       [/define\s*\(\s*['"]WP_SITEURL['"]\s*,\s*['"][^'"]*['"]\s*\)/g, `define( 'WP_SITEURL', '${localUrl}' )`],
     ];
 
-    let patched = content;
+    let patched = original;
     for (const [pattern, replacement] of replacements) {
       patched = patched.replace(pattern, replacement);
     }
 
-    // Inject WP_HOME / WP_SITEURL if they weren't already in the file
-    if (!/define\s*\(\s*['"]WP_HOME['"]/i.test(content)) {
+    // Inject WP_HOME / WP_SITEURL if they weren't in the original file
+    if (!/define\s*\(\s*['"]WP_HOME['"]/i.test(original)) {
+      const before = patched;
+
+      // Primary: insert before the standard "That's all, stop editing!" comment
       patched = patched.replace(
         /(\/\*\s*That'?s all[^*]*\*\/)/i,
         `define( 'WP_HOME', '${localUrl}' );\ndefine( 'WP_SITEURL', '${localUrl}' );\n\n$1`
       );
-    }
 
-    if (patched === content) {
-      logger.warn(`[DockerManager] wp-config.php patterns not found, skipping patch`);
-      return;
+      // Fallback: insert before require_once ABSPATH (always present in wp-config.php)
+      if (patched === before) {
+        patched = patched.replace(
+          /(require_once\s+ABSPATH[^;]+;)/i,
+          `define( 'WP_HOME', '${localUrl}' );\ndefine( 'WP_SITEURL', '${localUrl}' );\n\n$1`
+        );
+      }
+
+      // Last resort: append to end of file
+      if (patched === before) {
+        patched += `\ndefine( 'WP_HOME', '${localUrl}' );\ndefine( 'WP_SITEURL', '${localUrl}' );\n`;
+      }
     }
 
     await fs.writeFile(wpConfigPath, patched, 'utf-8');
-    logger.info(`[DockerManager] Patched wp-config.php for Docker`);
+    logger.info(`[DockerManager] Patched wp-config.php for Docker (${localUrl})`);
+  }
+
+  /**
+   * Strip HTTPS-redirect and canonical-domain rewrite rules from the root
+   * .htaccess so the local HTTP-only Docker container can serve CSS/JS without
+   * every request getting 301'd to https://localhost which doesn't exist.
+   * Leaves the standard WordPress permalink block intact.
+   * Idempotent — safe to call on every startLocal.
+   */
+  async sanitizeRootHtaccess(localPath: string): Promise<void> {
+    const htaccessPath = path.join(localPath, '.htaccess');
+    let content: string;
+    try {
+      content = await fs.readFile(htaccessPath, 'utf-8');
+    } catch {
+      return;
+    }
+
+    const lines = content.split('\n');
+    const filtered = lines.filter((line) => {
+      const t = line.trim();
+      // HTTPS-off condition: RewriteCond %{HTTPS} off
+      if (/^RewriteCond\s+%\{HTTPS\}\s+off/i.test(t)) { return false; }
+      // Server-port-based HTTP detection: RewriteCond %{SERVER_PORT} !=443
+      if (/^RewriteCond\s+%\{SERVER_PORT\}/i.test(t)) { return false; }
+      // Canonical-domain redirect condition: RewriteCond %{HTTP_HOST} !^...
+      if (/^RewriteCond\s+%\{HTTP_HOST\}\s+!/i.test(t)) { return false; }
+      // Any RewriteRule that redirects to an absolute https:// URL
+      if (/^RewriteRule\s+\S+\s+https?:\/\/[^\s]+\s+\[.*R=/i.test(t)) { return false; }
+      return true;
+    });
+
+    const sanitized = filtered.join('\n');
+    if (sanitized !== content) {
+      await fs.writeFile(htaccessPath, sanitized, 'utf-8');
+      logger.info(`[DockerManager] Sanitized root .htaccess at ${localPath}`);
+    }
   }
 
   /**
@@ -259,11 +307,91 @@ RewriteRule ^(.*)$ https://${domain}/wp-content/uploads/$1 [R=302,L]
     logger.info(`[DockerManager] Wrote uploads proxy .htaccess for ${domain}`);
   }
 
+  /**
+   * Write wp-content/mu-plugins/localdock-dev-env.php.
+   * Deactivates asset-optimization and page-caching plugins so WordPress serves
+   * individual CSS/JS files instead of regenerated bundles that would be missing
+   * uploads-based generated CSS (UAG, Hummingbird, etc.).
+   * Always overwrites — the disabled-plugin list may change between extension versions.
+   */
+  async scaffoldDevPlugin(localPath: string): Promise<void> {
+    const muPluginsDir = path.join(localPath, 'wp-content', 'mu-plugins');
+    const pluginPath = path.join(muPluginsDir, 'localdock-dev-env.php');
+
+    await fs.mkdir(muPluginsDir, { recursive: true });
+
+    const content = `<?php
+/**
+ * LocalDock: Dev environment helpers.
+ * Auto-generated — do not edit. Not pushed to production.
+ *
+ * Deactivates asset-optimization and caching plugins so WordPress falls back to
+ * serving individual CSS/JS files. Missing uploads (UAG CSS, Hummingbird bundles,
+ * etc.) are then handled by the uploads/.htaccess proxy to the live server.
+ */
+add_filter( 'option_active_plugins', function ( $plugins ) {
+    $disable = [
+        'hummingbird-performance/hummingbird-performance.php',
+        'wp-hummingbird/wp-hummingbird.php',
+        'litespeed-cache/litespeed-cache.php',
+        'wp-rocket/wp-rocket.php',
+        'w3-total-cache/w3-total-cache.php',
+        'wp-super-cache/wp-cache.php',
+        'wp-fastest-cache/wpFastestCache.php',
+        'autoptimize/autoptimize.php',
+        'sg-cachepress/sg-cachepress.php',
+        'breeze/breeze.php',
+        'cache-enabler/cache-enabler.php',
+        'comet-cache/comet-cache.php',
+    ];
+    return array_values( array_diff( (array) $plugins, $disable ) );
+} );
+`;
+    await fs.writeFile(pluginPath, content, 'utf-8');
+    logger.info(`[DockerManager] Wrote dev-env plugin at ${pluginPath}`);
+  }
+
+  /**
+   * Write wp-content/mu-plugins/localdock-mail.php so WordPress routes all
+   * outgoing email through Mailpit instead of a real mail server.
+   * Idempotent — skipped if the file already exists.
+   */
+  async scaffoldMailPlugin(localPath: string): Promise<void> {
+    const muPluginsDir = path.join(localPath, 'wp-content', 'mu-plugins');
+    const pluginPath = path.join(muPluginsDir, 'localdock-mail.php');
+
+    await fs.mkdir(muPluginsDir, { recursive: true });
+
+    try {
+      await fs.access(pluginPath);
+      return;
+    } catch {
+      // doesn't exist yet
+    }
+
+    const content = `<?php
+/**
+ * LocalDock: Route WordPress mail through Mailpit.
+ * Auto-generated — do not edit. Not pushed to production.
+ */
+add_action( 'phpmailer_init', function ( $phpmailer ) {
+    $phpmailer->isSMTP();
+    $phpmailer->Host     = 'mailpit';
+    $phpmailer->Port     = 1025;
+    $phpmailer->SMTPAuth = false;
+} );
+`;
+    await fs.writeFile(pluginPath, content, 'utf-8');
+    logger.info(`[DockerManager] Wrote Mailpit plugin at ${pluginPath}`);
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
   private buildComposeTemplate(port: number, dbName: string, safeVolumeName: string): string {
+    const mailPort = port + 1;
+    const adminerPort = port + 2;
     return `services:
   wordpress:
     image: wordpress:latest
@@ -279,6 +407,8 @@ RewriteRule ^(.*)$ https://${domain}/wp-content/uploads/$1 [R=302,L]
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     restart: unless-stopped
 
   db:
@@ -296,6 +426,22 @@ RewriteRule ^(.*)$ https://${domain}/wp-content/uploads/$1 [R=302,L]
       interval: 5s
       timeout: 10s
       retries: 10
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${mailPort}:8025"
+    restart: unless-stopped
+
+  adminer:
+    image: adminer:latest
+    ports:
+      - "${adminerPort}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    depends_on:
+      - db
     restart: unless-stopped
 
 volumes:

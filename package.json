@@ -102,6 +102,24 @@
         "category": "LocalDock cPanel"
       },
       {
+        "command": "localdockCpanel.resetLocalConfig",
+        "title": "Reset Local Config",
+        "icon": "$(refresh)",
+        "category": "LocalDock cPanel"
+      },
+      {
+        "command": "localdockCpanel.openMailpit",
+        "title": "Open Mail Inbox (Mailpit)",
+        "icon": "$(mail)",
+        "category": "LocalDock cPanel"
+      },
+      {
+        "command": "localdockCpanel.openAdminer",
+        "title": "Open Database Browser (Adminer)",
+        "icon": "$(database)",
+        "category": "LocalDock cPanel"
+      },
+      {
         "command": "localdockCpanel.openDockerSetup",
         "title": "Install Docker Desktop",
         "icon": "$(link-external)",
@@ -222,6 +240,21 @@
           "group": "local@2"
         },
         {
+          "command": "localdockCpanel.openMailpit",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /localEnv_running/",
+          "group": "local@3"
+        },
+        {
+          "command": "localdockCpanel.openAdminer",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /localEnv_running/",
+          "group": "local@4"
+        },
+        {
+          "command": "localdockCpanel.resetLocalConfig",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
+          "group": "local@9"
+        },
+        {
           "command": "localdockCpanel.startLocal",
           "when": "view == localdockCpanel.localDockerTree && viewItem =~ /localEnv_(stopped|error)/",
           "group": "local@1"
@@ -245,6 +278,21 @@
           "command": "localdockCpanel.openLocalSite",
           "when": "view == localdockCpanel.localDockerTree && viewItem =~ /localEnv_running/",
           "group": "local@2"
+        },
+        {
+          "command": "localdockCpanel.openMailpit",
+          "when": "view == localdockCpanel.localDockerTree && viewItem =~ /localEnv_running/",
+          "group": "local@3"
+        },
+        {
+          "command": "localdockCpanel.openAdminer",
+          "when": "view == localdockCpanel.localDockerTree && viewItem =~ /localEnv_running/",
+          "group": "local@4"
+        },
+        {
+          "command": "localdockCpanel.resetLocalConfig",
+          "when": "view == localdockCpanel.localDockerTree && viewItem == localEnvItem",
+          "group": "local@9"
         },
         {
           "command": "localdockCpanel.cancelOperation",
@@ -314,6 +362,17 @@
           "type": "number",
           "default": 8080,
           "description": "Starting port number for local Docker WordPress environments. Each site gets a unique port assigned sequentially."
+        },
+        "localdockCpanel.pullUploads": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include wp-content/uploads when pulling a site. Disabled by default because the media library can be very large. When disabled, missing uploads are proxied from the live server at runtime."
+        },
+        "localdockCpanel.uploadsSyncPaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["uag-plugin/**", "hummingbird-assets/**"],
+          "description": "Upload subdirectory globs that are always pulled even when pullUploads is false. Paths are relative to wp-content/uploads/. Used for plugin-generated CSS/JS (Spectra/UAG, Hummingbird, etc.) so local environments load the correct styles."
         }
       }
     }

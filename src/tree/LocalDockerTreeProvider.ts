@@ -189,7 +189,11 @@ function buildLocalEnvTooltip(site: WordPressSite): string {
   };
   lines.push(`Status: ${statusLabels[env.status]}`);
   if (env.port) {
-    lines.push(`Port: ${env.port}`);
+    lines.push(`Site:    http://localhost:${env.port}`);
+    if (env.status === 'running') {
+      lines.push(`Mail:    http://localhost:${env.port + 1}`);
+      lines.push(`DB:      http://localhost:${env.port + 2}`);
+    }
   }
   if (env.url) {
     lines.push(`URL: ${env.url}`);

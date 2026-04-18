@@ -92,7 +92,9 @@ export class DatabaseSyncer {
   async pushDatabase(
     site: WordPressSite,
     localSitePath: string,
-    onProgress?: (message: string) => void
+    onProgress?: (message: string) => void,
+    localUrl?: string,
+    productionUrl?: string
   ): Promise<void> {
     if (!isValidDbIdentifier(site.dbName)) {
       throw new LocalDockError(
@@ -123,9 +125,26 @@ export class DatabaseSyncer {
       );
     }
 
+    // Rewrite localhost URLs back to production before uploading
+    let uploadPath = localSqlPath;
+    let rewrittenDump: string | null = null;
+    if (localUrl && productionUrl && localUrl !== productionUrl) {
+      onProgress?.('Rewriting database URLs for production…');
+      rewrittenDump = localSqlPath + '.push.tmp';
+      await fs.copyFile(localSqlPath, rewrittenDump);
+      await DatabaseSyncer.rewriteUrlsInDump(rewrittenDump, localUrl, productionUrl);
+      uploadPath = rewrittenDump;
+    }
+
     // Upload dump
     onProgress?.('Uploading database dump…');
-    await this.sftp.fastPut(localSqlPath, tmpRemote);
+    try {
+      await this.sftp.fastPut(uploadPath, tmpRemote);
+    } finally {
+      if (rewrittenDump) {
+        await fs.unlink(rewrittenDump).catch(() => {});
+      }
+    }
 
     // Import on remote
     onProgress?.('Importing database on server…');

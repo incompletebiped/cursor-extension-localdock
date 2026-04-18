@@ -124,11 +124,20 @@ export class SftpClient {
   }
 
   private isExcluded(relativePath: string, patterns: string[]): boolean {
-    // Simple glob matching without external dependencies
-    for (const pattern of patterns) {
-      if (this.matchGlob(relativePath, pattern)) {
-        return true;
-      }
+    const positivePatterns = patterns.filter(p => !p.startsWith('!'));
+    const negationPatterns = patterns.filter(p => p.startsWith('!')).map(p => p.slice(1));
+
+    // A negation pattern wins over any positive match — either the path itself
+    // matches the negation glob, or the path is a parent directory that must be
+    // walked to reach files the negation targets.
+    for (const negPat of negationPatterns) {
+      if (this.matchGlob(relativePath, negPat)) { return false; }
+      const prefix = negPat.replace(/\/\*\*$/, '');
+      if (prefix === relativePath || prefix.startsWith(relativePath + '/')) { return false; }
+    }
+
+    for (const pattern of positivePatterns) {
+      if (this.matchGlob(relativePath, pattern)) { return true; }
     }
     return false;
   }
@@ -191,6 +200,20 @@ export class SftpClient {
         resolve();
       });
     });
+  }
+
+  /** Create a directory and all missing ancestors (like mkdir -p). */
+  async mkdirp(remotePath: string): Promise<void> {
+    const parts = remotePath.split('/');
+    let current = '';
+    for (const part of parts) {
+      if (!part) {
+        current = '/';
+        continue;
+      }
+      current = current === '/' ? `/${part}` : `${current}/${part}`;
+      await this.mkdir(current);
+    }
   }
 
   close(): void {

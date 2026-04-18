@@ -34,13 +34,48 @@ export class ConfigManager {
 
   get excludePatterns(): string[] {
     return this.config.get<string[]>('excludePatterns', [
-      'wp-content/uploads/**',   // media uploads — large, no need to sync
+      'wp-content/uploads/**',
       'wp-content/cache/**',
       'wp-content/backup-db/**',
       '*.log',
       '.DS_Store',
       'node_modules/**',
     ]);
+  }
+
+  get pullUploads(): boolean {
+    return this.config.get<boolean>('pullUploads', false);
+  }
+
+  /**
+   * Upload subdirectory globs that are always pulled even when pullUploads is false.
+   * Paths are relative to wp-content/uploads/. Used for plugin-generated CSS/JS
+   * (Spectra/UAG, Hummingbird, etc.) so they don't 404 locally.
+   */
+  get uploadsSyncPaths(): string[] {
+    return this.config.get<string[]>('uploadsSyncPaths', [
+      'uag-plugin/**',
+      'hummingbird-assets/**',
+    ]);
+  }
+
+  /**
+   * Patterns excluded from push diffs. Uploads are intentionally NOT excluded so
+   * newly created local media gets pushed. The proxy .htaccess is excluded because
+   * it is a local-only file that must never reach production.
+   */
+  get pushExcludePatterns(): string[] {
+    return [
+      'wp-content/cache/**',
+      'wp-content/backup-db/**',
+      '*.log',
+      '.DS_Store',
+      'node_modules/**',
+      '.localdock/**',
+      'wp-content/uploads/.htaccess',
+      'wp-content/mu-plugins/localdock-mail.php',
+      'wp-content/mu-plugins/localdock-dev-env.php',
+    ];
   }
 
   get databaseSyncMethod(): 'mysqldump' | 'wpcli' {

@@ -99,6 +99,15 @@ export async function startLocal(
     activityManager.update(opId, 40, 'Configuring uploads proxy…');
     await dockerManager.scaffoldUploadsProxy(site.localPath, site.domain);
 
+    activityManager.update(opId, 45, 'Patching .htaccess for local HTTP…');
+    await dockerManager.sanitizeRootHtaccess(site.localPath);
+
+    activityManager.update(opId, 47, 'Configuring mail capture…');
+    await dockerManager.scaffoldMailPlugin(site.localPath);
+
+    activityManager.update(opId, 49, 'Configuring dev environment…');
+    await dockerManager.scaffoldDevPlugin(site.localPath);
+
     activityManager.update(opId, 50, 'Starting Docker containers…');
     await dockerManager.start(site.localPath);
 

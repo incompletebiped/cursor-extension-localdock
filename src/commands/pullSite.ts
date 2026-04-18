@@ -105,11 +105,24 @@ export async function pullSite(
       },
     };
 
+    // When uploads are excluded, still pull plugin-generated subdirectories
+    // (UAG/Spectra CSS, Hummingbird bundles, etc.) so they load without needing
+    // the uploads proxy. Uses negation patterns (!path) to override the broad exclude.
+    let pullExclude: string[];
+    if (configManager.pullUploads) {
+      pullExclude = configManager.excludePatterns.filter(p => p !== 'wp-content/uploads/**');
+    } else {
+      const negations = configManager.uploadsSyncPaths.map(
+        p => `!wp-content/uploads/${p}`
+      );
+      pullExclude = [...configManager.excludePatterns, ...negations];
+    }
+
     report(5, 'Indexing remote files…');
     const { fileIndex, totalFiles } = await fileSyncer.downloadAll(
       site.docroot,
       localPath,
-      configManager.excludePatterns,
+      pullExclude,
       token,
       progressAdapter
     );

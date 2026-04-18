@@ -110,6 +110,7 @@ export class FileSyncer {
     const total = filesToUpload.length + filesToDelete.length;
     const semaphore = new Semaphore(this.maxConcurrent);
     const newFileIndex: SiteManifest['fileIndex'] = {};
+    const createdDirs = new Set<string>();
     let completed = 0;
 
     const uploadTasks = filesToUpload.map(async (relPath) => {
@@ -125,8 +126,13 @@ export class FileSyncer {
 
         const localPath = path.join(localBase, relPath);
         const remotePath = `${remoteBase}/${relPath}`;
+        const remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'));
 
-        // Ensure remote directory exists via SSH mkdir is handled at a higher level
+        if (!createdDirs.has(remoteDir)) {
+          await this.sftp.mkdirp(remoteDir);
+          createdDirs.add(remoteDir);
+        }
+
         await this.sftp.fastPut(localPath, remotePath);
 
         const md5 = await computeMd5(localPath);

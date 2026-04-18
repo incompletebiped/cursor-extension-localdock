@@ -27,6 +27,7 @@ import { openSiteFolder } from './commands/openSiteFolder';
 import { startLocal } from './commands/startLocal';
 import { stopLocal } from './commands/stopLocal';
 import { openLocalSite } from './commands/openLocalSite';
+import { resetLocalConfig } from './commands/resetLocalConfig';
 
 let _registry: SiteRegistry | undefined;
 let _dockerManager: DockerManager | undefined;
@@ -160,6 +161,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('localdockCpanel.openLocalSite', (item: SiteTreeItem | LocalEnvItem | { site: import('./models/Site').WordPressSite }) => {
       const site = 'site' in item ? item.site : (item as SiteTreeItem).site;
       return openLocalSite(site);
+    }),
+
+    vscode.commands.registerCommand('localdockCpanel.resetLocalConfig', (item: SiteTreeItem | LocalEnvItem) =>
+      resetLocalConfig(item, registry, siteTreeProvider, localDockerTreeProvider, activityManager, dockerManager)
+    ),
+
+    vscode.commands.registerCommand('localdockCpanel.openMailpit', (item: SiteTreeItem | LocalEnvItem) => {
+      const site = 'site' in item ? (item as SiteTreeItem).site : (item as LocalEnvItem).site;
+      if (!site.localEnv?.port || site.localEnv.status !== 'running') {
+        vscode.window.showWarningMessage(`Local environment for ${site.domain} is not running.`);
+        return;
+      }
+      vscode.env.openExternal(vscode.Uri.parse(`http://localhost:${site.localEnv.port + 1}`));
+    }),
+
+    vscode.commands.registerCommand('localdockCpanel.openAdminer', (item: SiteTreeItem | LocalEnvItem) => {
+      const site = 'site' in item ? (item as SiteTreeItem).site : (item as LocalEnvItem).site;
+      if (!site.localEnv?.port || site.localEnv.status !== 'running') {
+        vscode.window.showWarningMessage(`Local environment for ${site.domain} is not running.`);
+        return;
+      }
+      vscode.env.openExternal(vscode.Uri.parse(`http://localhost:${site.localEnv.port + 2}/?server=db&username=wordpress&db=wordpress`));
     }),
 
     vscode.commands.registerCommand('localdockCpanel.openDockerSetup', () => {

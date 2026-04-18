@@ -58,7 +58,7 @@ export async function pushSite(
   const diff = await engine.computeLocalChanges(
     site.localPath,
     manifest,
-    configManager.excludePatterns
+    configManager.pushExcludePatterns
   );
 
   if (!engine.hasChanges(diff)) {
@@ -160,7 +160,9 @@ export async function pushSite(
     }
 
     report(82, 'Pushing database…');
-    await dbSyncer.pushDatabase(site, site.localPath!, (msg) => report(85, msg));
+    const localUrl = manifest.localPort ? `http://localhost:${manifest.localPort}` : undefined;
+    const productionUrl = `https://${site.domain}`;
+    await dbSyncer.pushDatabase(site, site.localPath!, (msg) => report(85, msg), localUrl, productionUrl);
 
     report(97, 'Updating manifest…');
     const updatedManifest = {
