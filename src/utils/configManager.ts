@@ -56,6 +56,13 @@ export class ConfigManager {
     return this.config.get<string[]>('uploadsSyncPaths', [
       'uag-plugin/**',
       'hummingbird-assets/**',
+      'elementor/css/**',
+      'elementor/fonts/**',
+      'astra/**',
+      'oceanwp/**',
+      'generatepress/**',
+      'bb-plugin/**',
+      'fusion-styles/**',
     ]);
   }
 

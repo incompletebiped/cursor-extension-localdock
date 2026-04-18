@@ -198,7 +198,8 @@ export class DatabaseSyncer {
 
   /**
    * Rewrite WordPress siteurl/home values in a SQL dump from production URL to local URL.
-   * Handles PHP serialized strings by recalculating byte-length prefixes.
+   * Handles PHP serialized strings by using the byte-length prefix to extract content,
+   * so strings containing embedded double quotes (e.g. CSS values) are handled correctly.
    * Streams the file to avoid loading large dumps into memory.
    */
   static async rewriteUrlsInDump(sqlPath: string, fromUrl: string, toUrl: string): Promise<void> {
@@ -222,21 +223,7 @@ export class DatabaseSyncer {
       rl.on('error', reject);
 
       rl.on('line', (line) => {
-        let out = line;
-
-        // Replace PHP serialized strings: s:XX:"http://old.com" → s:YY:"http://new.com"
-        out = out.replace(/s:(\d+):"([^"]*?)"/g, (_match, lenStr, str) => {
-          if (!str.includes(from)) { return _match; }
-          const replaced = str.replace(new RegExp(escapeRegExp(from), 'g'), to);
-          const newLen = Buffer.byteLength(replaced, 'utf-8');
-          return `s:${newLen}:"${replaced}"`;
-        });
-
-        // Replace plain string occurrences outside serialized context
-        if (out.includes(from)) {
-          out = out.replace(new RegExp(escapeRegExp(from), 'g'), to);
-        }
-
+        const out = DatabaseSyncer.rewriteLineUrls(line, from, to);
         outputStream.write(out + '\n');
       });
 
@@ -250,6 +237,76 @@ export class DatabaseSyncer {
     // Replace original with rewritten file
     await fs.rename(tmpPath, sqlPath);
     logger.info(`[DatabaseSyncer] URL rewrite complete`);
+  }
+
+  /**
+   * Rewrite all occurrences of `from` → `to` in a single SQL dump line.
+   *
+   * PHP serialized strings use `s:N:"<content>"` where N is the BYTE length of
+   * the content. A naive regex like `[^"]*?` stops at the first embedded double
+   * quote, producing a wrong length and corrupting the entire serialized value
+   * (which causes PHP's unserialize() to return false for the whole option,
+   * reverting ALL theme-mod/customizer settings to defaults).
+   *
+   * This method finds each `s:N:"` marker, reads exactly N bytes from the raw
+   * buffer to get the true content (embedded quotes included), rewrites any URLs
+   * inside, recalculates the byte length, and reconstructs the token. Any
+   * remaining plain-text occurrences (JSON, non-serialized values) are replaced
+   * with a simple string replace afterward.
+   */
+  static rewriteLineUrls(line: string, from: string, to: string): string {
+    if (!line.includes(from)) { return line; }
+
+    const fromRe = new RegExp(escapeRegExp(from), 'g');
+    const lineBuf = Buffer.from(line, 'utf-8');
+
+    let result = '';
+    let charPos = 0;
+    const sPattern = /s:(\d+):"/g;
+    let m: RegExpExecArray | null;
+
+    while ((m = sPattern.exec(line)) !== null) {
+      const matchCharStart = m.index;
+      const byteLen = parseInt(m[1], 10);
+      const contentCharStart = matchCharStart + m[0].length;
+
+      // Locate content start in bytes
+      const byteContentStart = Buffer.byteLength(line.slice(0, contentCharStart), 'utf-8');
+
+      // Guard against malformed s:N:" where N exceeds the buffer
+      if (byteContentStart + byteLen > lineBuf.length) { continue; }
+
+      // Extract exactly byteLen bytes — correctly handles embedded " and multi-byte chars
+      const contentBuf = lineBuf.slice(byteContentStart, byteContentStart + byteLen);
+      const content = contentBuf.toString('utf-8');
+
+      // Verify closing quote sits immediately after the declared byte span
+      const closingCharPos = contentCharStart + content.length;
+      if (line[closingCharPos] !== '"') { continue; }
+
+      // Append everything from the last processed position up to this token
+      result += line.slice(charPos, matchCharStart);
+
+      if (content.includes(from)) {
+        const replaced = content.replace(fromRe, to);
+        result += `s:${Buffer.byteLength(replaced, 'utf-8')}:"${replaced}"`;
+      } else {
+        result += `s:${byteLen}:"${content}"`;
+      }
+
+      charPos = closingCharPos + 1;
+      sPattern.lastIndex = charPos;
+    }
+
+    // Append the tail of the line after the last serialized token
+    result += line.slice(charPos);
+
+    // Replace any remaining plain-text occurrences (JSON, unquoted SQL values, etc.)
+    if (result.includes(from)) {
+      result = result.replace(fromRe, to);
+    }
+
+    return result;
   }
 
   /**

@@ -207,12 +207,14 @@ export class DockerManager {
     }
 
     const replacements: Array<[RegExp, string]> = [
-      [/define\s*\(\s*['"]DB_HOST['"]\s*,\s*['"][^'"]*['"]\s*\)/g,     `define( 'DB_HOST', 'db' )`],
-      [/define\s*\(\s*['"]DB_USER['"]\s*,\s*['"][^'"]*['"]\s*\)/g,     `define( 'DB_USER', 'wordpress' )`],
-      [/define\s*\(\s*['"]DB_PASSWORD['"]\s*,\s*['"][^'"]*['"]\s*\)/g, `define( 'DB_PASSWORD', 'wordpress' )`],
-      [/define\s*\(\s*['"]DB_NAME['"]\s*,\s*['"][^'"]*['"]\s*\)/g,     `define( 'DB_NAME', 'wordpress' )`],
-      [/define\s*\(\s*['"]WP_HOME['"]\s*,\s*['"][^'"]*['"]\s*\)/g,     `define( 'WP_HOME', '${localUrl}' )`],
-      [/define\s*\(\s*['"]WP_SITEURL['"]\s*,\s*['"][^'"]*['"]\s*\)/g, `define( 'WP_SITEURL', '${localUrl}' )`],
+      [/define\s*\(\s*['"]DB_HOST['"]\s*,\s*['"][^'"]*['"]\s*\)/g,           `define( 'DB_HOST', 'db' )`],
+      [/define\s*\(\s*['"]DB_USER['"]\s*,\s*['"][^'"]*['"]\s*\)/g,           `define( 'DB_USER', 'wordpress' )`],
+      [/define\s*\(\s*['"]DB_PASSWORD['"]\s*,\s*['"][^'"]*['"]\s*\)/g,       `define( 'DB_PASSWORD', 'wordpress' )`],
+      [/define\s*\(\s*['"]DB_NAME['"]\s*,\s*['"][^'"]*['"]\s*\)/g,           `define( 'DB_NAME', 'wordpress' )`],
+      [/define\s*\(\s*['"]WP_HOME['"]\s*,\s*['"][^'"]*['"]\s*\)/g,           `define( 'WP_HOME', '${localUrl}' )`],
+      [/define\s*\(\s*['"]WP_SITEURL['"]\s*,\s*['"][^'"]*['"]\s*\)/g,       `define( 'WP_SITEURL', '${localUrl}' )`],
+      [/define\s*\(\s*['"]DISALLOW_FILE_EDIT['"]\s*,\s*[^)]+\)/g,           `define( 'DISALLOW_FILE_EDIT', false )`],
+      [/define\s*\(\s*['"]DISALLOW_FILE_MODS['"]\s*,\s*[^)]+\)/g,           `define( 'DISALLOW_FILE_MODS', false )`],
     ];
 
     let patched = original;
@@ -220,27 +222,42 @@ export class DockerManager {
       patched = patched.replace(pattern, replacement);
     }
 
-    // Inject WP_HOME / WP_SITEURL if they weren't in the original file
+    // Build a block of constants that must be injected if absent in the original.
+    // Always inject dev-only overrides regardless of whether the constant existed —
+    // the regex replacements above already handle the "exists" case.
+    const injections: string[] = [];
     if (!/define\s*\(\s*['"]WP_HOME['"]/i.test(original)) {
+      injections.push(`define( 'WP_HOME', '${localUrl}' );`);
+      injections.push(`define( 'WP_SITEURL', '${localUrl}' );`);
+    }
+    if (!/define\s*\(\s*['"]DISALLOW_FILE_EDIT['"]/i.test(original)) {
+      injections.push(`define( 'DISALLOW_FILE_EDIT', false );`);
+    }
+    if (!/define\s*\(\s*['"]DISALLOW_FILE_MODS['"]/i.test(original)) {
+      injections.push(`define( 'DISALLOW_FILE_MODS', false );`);
+    }
+
+    if (injections.length > 0) {
+      const block = injections.join('\n');
       const before = patched;
 
       // Primary: insert before the standard "That's all, stop editing!" comment
       patched = patched.replace(
         /(\/\*\s*That'?s all[^*]*\*\/)/i,
-        `define( 'WP_HOME', '${localUrl}' );\ndefine( 'WP_SITEURL', '${localUrl}' );\n\n$1`
+        `${block}\n\n$1`
       );
 
       // Fallback: insert before require_once ABSPATH (always present in wp-config.php)
       if (patched === before) {
         patched = patched.replace(
           /(require_once\s+ABSPATH[^;]+;)/i,
-          `define( 'WP_HOME', '${localUrl}' );\ndefine( 'WP_SITEURL', '${localUrl}' );\n\n$1`
+          `${block}\n\n$1`
         );
       }
 
       // Last resort: append to end of file
       if (patched === before) {
-        patched += `\ndefine( 'WP_HOME', '${localUrl}' );\ndefine( 'WP_SITEURL', '${localUrl}' );\n`;
+        patched += `\n${block}\n`;
       }
     }
 
