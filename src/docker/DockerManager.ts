@@ -115,6 +115,9 @@ export class DockerManager {
   async reset(localPath: string): Promise<void> {
     logger.info(`[DockerManager] Resetting environment at ${localPath}`);
     await this.spawnCompose(['down', '--volumes', '--remove-orphans'], localPath);
+    // Delete the compose file so scaffoldComposeFile regenerates it from the latest template
+    const composePath = path.join(localPath, '.localdock', 'docker-compose.yml');
+    await fs.unlink(composePath).catch(() => {});
   }
 
   /** Stop the Docker Compose stack (docker compose down) */
@@ -443,6 +446,7 @@ add_action( 'phpmailer_init', function ( $phpmailer ) {
       interval: 5s
       timeout: 10s
       retries: 10
+      start_period: 120s
     restart: unless-stopped
 
   mailpit:

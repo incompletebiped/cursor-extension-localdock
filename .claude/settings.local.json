@@ -18,7 +18,9 @@
       "Bash(/c/Users/baile/AppData/Local/Programs/Common/c2switcher.exe current *)",
       "Bash(git *)",
       "Bash(ls -la dist/)",
-      "Bash(ls -la out/)"
+      "Bash(ls -la out/)",
+      "Bash(docker system df *)",
+      "Bash(docker run *)"
     ]
   }
 }

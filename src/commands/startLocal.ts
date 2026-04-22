@@ -70,14 +70,26 @@ export async function startLocal(
     // Scaffold compose file
     const { wasCreated: composeWasCreated } = await dockerManager.scaffoldComposeFile(site.localPath, site.domain, port, 'wordpress');
 
+    // Ensure db.sql exists as a file before Docker mounts it. If the source path is
+    // missing, Docker Desktop creates an empty directory instead; MySQL's init entrypoint
+    // then fails on `mysql < db.sql` (can't redirect a directory) and crashes the container.
+    const sqlPath = path.join(site.localPath, '.localdock', 'db.sql');
+    try {
+      await fs.access(sqlPath);
+    } catch {
+      await fs.writeFile(sqlPath, '', 'utf-8');
+    }
+
     activityManager.update(opId, 20, 'Rewriting database URLs…');
 
     // On first start OR when a fresh compose was just created: wipe stale volumes and re-process db.sql
-    const sqlPath = path.join(site.localPath, '.localdock', 'db.sql');
     const dbUrlRewritten = manifest?.dbUrlRewritten ?? false;
     if (!dbUrlRewritten || composeWasCreated) {
       activityManager.update(opId, 22, 'Clearing stale Docker volumes…');
       await dockerManager.reset(site.localPath);
+
+      // reset() deleted the compose file — regenerate it from the latest template
+      await dockerManager.scaffoldComposeFile(site.localPath, site.domain, port, 'wordpress');
 
       try {
         await fs.access(sqlPath);
