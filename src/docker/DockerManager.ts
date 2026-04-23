@@ -12,26 +12,6 @@ import { sanitizeDbName } from '../utils/pathUtils';
 export class DockerManager {
   constructor(private readonly configManager: ConfigManager) {}
 
-  /** Check that Docker CLI is in PATH and the daemon is running. */
-  async assertDockerAvailable(): Promise<void> {
-    const version = await this.getDockerVersion();
-    if (version === null) {
-      throw new LocalDockError(
-        'Docker Desktop is not installed or not in PATH. Download it from https://www.docker.com/products/docker-desktop',
-        LocalDockErrorCode.DOCKER_NOT_FOUND,
-        false
-      );
-    }
-    const ps = await this.spawnCompose(['ps', '--quiet'], null);
-    if (ps.code !== 0) {
-      throw new LocalDockError(
-        'Docker Desktop is installed but not running. Please open Docker Desktop and wait for it to start, then try again.',
-        LocalDockErrorCode.DOCKER_NOT_FOUND,
-        false
-      );
-    }
-  }
-
   /** Returns Docker version string, or null if unavailable. */
   async getDockerVersion(): Promise<string | null> {
     try {
@@ -45,22 +25,62 @@ export class DockerManager {
     }
   }
 
+  /** Returns true if the Docker daemon is responsive. */
+  async isDaemonRunning(): Promise<boolean> {
+    try {
+      const result = await this.spawnCompose(['info'], null);
+      return result.code === 0;
+    } catch {
+      return false;
+    }
+  }
+
   /**
-   * Assign a free port for a site. Reuses manifest.localPort if still free,
-   * otherwise finds the next free port starting from dockerStartPort.
+   * Attempt to launch Docker Desktop (best-effort, fire-and-forget).
+   * Tries the standard install path on Windows with AppData fallback;
+   * uses `open -a Docker` on macOS.
+   */
+  launchDockerDesktop(): void {
+    try {
+      if (process.platform === 'win32') {
+        const primary = path.join('C:', 'Program Files', 'Docker', 'Docker', 'Docker Desktop.exe');
+        const proc = child_process.spawn(primary, [], { detached: true, stdio: 'ignore' });
+        proc.on('error', () => {
+          const fallback = path.join(process.env['LOCALAPPDATA'] ?? 'C:', 'Docker', 'Docker Desktop.exe');
+          child_process.spawn(fallback, [], { detached: true, stdio: 'ignore' }).unref();
+        });
+        proc.unref();
+      } else if (process.platform === 'darwin') {
+        child_process.spawn('open', ['-a', 'Docker'], { detached: true, stdio: 'ignore' }).unref();
+      }
+    } catch (err) {
+      logger.warn(`[DockerManager] Failed to launch Docker Desktop: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
+   * Assign a free port block for a site. Requires three consecutive free ports:
+   * port (WordPress), port+1 (Mailpit), port+2 (Adminer).
+   * Reuses manifest.localPort if the full block is still free.
    */
   async assignPort(localPath: string, manifest: SiteManifest | null): Promise<number> {
-    // Reuse existing port if still free
-    if (manifest?.localPort) {
-      if (await this.isPortFree(manifest.localPort)) {
-        return manifest.localPort;
-      }
+    const usedPorts = await this.getUsedPorts(localPath);
+
+    const blockFree = async (p: number): Promise<boolean> =>
+      (await this.isPortFree(p)) &&
+      (await this.isPortFree(p + 1)) &&
+      (await this.isPortFree(p + 2)) &&
+      !usedPorts.has(p) &&
+      !usedPorts.has(p + 1) &&
+      !usedPorts.has(p + 2);
+
+    // Reuse existing port block if all three slots are still free
+    if (manifest?.localPort && await blockFree(manifest.localPort)) {
+      return manifest.localPort;
     }
 
-    const usedPorts = await this.getUsedPorts(localPath);
     let port = this.configManager.dockerStartPort;
-
-    while (!(await this.isPortFree(port)) || usedPorts.has(port)) {
+    while (!(await blockFree(port))) {
       port++;
     }
     return port;
@@ -81,11 +101,21 @@ export class DockerManager {
 
     await fs.mkdir(localDockDir, { recursive: true });
 
-    // Don't overwrite existing file — user may have customized it
+    // Keep existing file only if it already uses the sentinel healthcheck.
+    // Files generated before the sentinel fix use the old `_options$` pattern
+    // which fires as soon as `CREATE TABLE wp_options` runs (before any INSERTs),
+    // letting WordPress boot with an empty options table and Astra fall back to
+    // defaults.  Regenerating the file here causes startLocal to enter the full
+    // reset path — wiping volumes and re-importing db.sql — which fixes the issue
+    // transparently without requiring the user to run "Reset Local Config".
     try {
       await fs.access(composePath);
-      logger.info(`[DockerManager] docker-compose.yml already exists for ${domain}, skipping scaffold`);
-      return { composePath, wasCreated: false };
+      const existing = await fs.readFile(composePath, 'utf-8');
+      if (existing.includes('localdock_ready')) {
+        logger.info(`[DockerManager] docker-compose.yml already exists for ${domain}, skipping scaffold`);
+        return { composePath, wasCreated: false };
+      }
+      logger.info(`[DockerManager] Stale healthcheck in docker-compose.yml for ${domain} — regenerating`);
     } catch {
       // File doesn't exist, create it
     }
@@ -123,7 +153,7 @@ export class DockerManager {
   /** Stop the Docker Compose stack (docker compose down) */
   async stop(localPath: string): Promise<void> {
     logger.info(`[DockerManager] Stopping local environment at ${localPath}`);
-    const result = await this.spawnCompose(['down'], localPath);
+    const result = await this.spawnCompose(['down', '--remove-orphans'], localPath);
     if (result.code !== 0) {
       throw new LocalDockError(
         `docker compose down failed: ${result.stderr}`,
@@ -177,7 +207,8 @@ export class DockerManager {
         return 'starting'; // partially up
       }
       return 'stopped';
-    } catch {
+    } catch (err) {
+      logger.warn(`[DockerManager] Failed to parse docker compose ps output: ${err instanceof Error ? err.message : String(err)}`);
       return 'stopped';
     }
   }
@@ -332,7 +363,9 @@ RewriteRule ^(.*)$ https://${domain}/wp-content/uploads/$1 [R=302,L]
    * Deactivates asset-optimization and page-caching plugins so WordPress serves
    * individual CSS/JS files instead of regenerated bundles that would be missing
    * uploads-based generated CSS (UAG, Hummingbird, etc.).
-   * Always overwrites — the disabled-plugin list may change between extension versions.
+   * On first boot (detected via .localdock/needs-init sentinel), clears all
+   * WordPress transients so stale production-URL caches don't override fresh DB values.
+   * Always overwrites — the plugin body may change between extension versions.
    */
   async scaffoldDevPlugin(localPath: string): Promise<void> {
     const muPluginsDir = path.join(localPath, 'wp-content', 'mu-plugins');
@@ -344,11 +377,96 @@ RewriteRule ^(.*)$ https://${domain}/wp-content/uploads/$1 [R=302,L]
 /**
  * LocalDock: Dev environment helpers.
  * Auto-generated — do not edit. Not pushed to production.
- *
- * Deactivates asset-optimization and caching plugins so WordPress falls back to
- * serving individual CSS/JS files. Missing uploads (UAG CSS, Hummingbird bundles,
- * etc.) are then handled by the uploads/.htaccess proxy to the live server.
  */
+
+// On first boot after a DB import:
+//  1. Replace production URLs with the local URL using PHP's own serialization
+//     functions — so byte counts in astra-settings and other serialized options
+//     stay correct. Raw SQL text replacement corrupts these counts when the
+//     serialized value contains single quotes (e.g. CSS url('...')).
+//  2. Clear all transients that may cache stale production-URL data.
+//  3. Bump Astra's CSS build version so it regenerates from fresh DB settings.
+// startLocal writes .localdock/needs-init before docker compose up; this hook
+// deletes it so subsequent requests skip the replacement.
+add_action( 'init', function () {
+    $flag     = ABSPATH . '.localdock/needs-init';
+    $url_file = ABSPATH . '.localdock/production-url';
+    if ( ! file_exists( $flag ) ) {
+        return;
+    }
+
+    // Replace production URLs in every option that contains them.
+    if ( file_exists( $url_file ) ) {
+        $prod = rtrim( trim( file_get_contents( $url_file ) ), '/' );
+        $local = rtrim( home_url(), '/' );
+
+        if ( $prod && $prod !== $local ) {
+            // Handle both http and https variants of the production URL.
+            $variants = array_unique( [
+                $prod,
+                preg_replace( '#^https://#', 'http://', $prod ),
+                preg_replace( '#^http://#',  'https://', $prod ),
+            ] );
+
+            global $wpdb;
+            foreach ( $variants as $from ) {
+                $rows = $wpdb->get_results( $wpdb->prepare(
+                    "SELECT option_id, option_name, option_value
+                       FROM {$wpdb->options}
+                      WHERE option_value LIKE %s",
+                    '%' . $wpdb->esc_like( $from ) . '%'
+                ) );
+
+                foreach ( $rows as $row ) {
+                    $decoded = maybe_unserialize( $row->option_value );
+                    $updated = _localdock_replace( $decoded, $from, $local );
+                    if ( $updated !== $decoded ) {
+                        update_option( $row->option_name, $updated );
+                    }
+                }
+            }
+        }
+    }
+
+    // Wipe transients and regenerate Astra CSS from the now-corrected settings.
+    global $wpdb;
+    $wpdb->query(
+        "DELETE FROM \`{$wpdb->options}\`
+          WHERE \`option_name\` LIKE '\\_transient\\_%'
+             OR \`option_name\` LIKE '\\_site\\_transient\\_%'"
+    );
+    update_option( 'astra_dynamic_css_build_version', time() );
+
+    @unlink( $flag );
+}, 1 );
+
+// Recursive URL replacement that respects PHP arrays and objects.
+// Using str_replace inside maybe_unserialize/update_option lets WordPress
+// re-serialize with correct byte counts — no manual byte arithmetic.
+function _localdock_replace( $data, $from, $to ) {
+    if ( is_array( $data ) ) {
+        $out = [];
+        foreach ( $data as $k => $v ) {
+            $out[ is_string( $k ) ? str_replace( $from, $to, $k ) : $k ]
+                = _localdock_replace( $v, $from, $to );
+        }
+        return $out;
+    }
+    if ( is_object( $data ) ) {
+        foreach ( get_object_vars( $data ) as $prop => $val ) {
+            $data->$prop = _localdock_replace( $val, $from, $to );
+        }
+        return $data;
+    }
+    if ( is_string( $data ) ) {
+        return str_replace( $from, $to, $data );
+    }
+    return $data;
+}
+
+// Deactivate asset-optimization and caching plugins so WordPress falls back to
+// serving individual CSS/JS files. Missing uploads (UAG CSS, Hummingbird bundles,
+// etc.) are then proxied to the live server via uploads/.htaccess.
 add_filter( 'option_active_plugins', function ( $plugins ) {
     $disable = [
         'hummingbird-performance/hummingbird-performance.php',
@@ -369,6 +487,35 @@ add_filter( 'option_active_plugins', function ( $plugins ) {
 `;
     await fs.writeFile(pluginPath, content, 'utf-8');
     logger.info(`[DockerManager] Wrote dev-env plugin at ${pluginPath}`);
+  }
+
+  /**
+   * Delete plugin-generated CSS cache files that were pulled from production.
+   * Astra, Spectra/UAG, and Hummingbird compile settings from wp_options into CSS
+   * files stored under uploads/. If those stale files are present, WordPress serves
+   * them instead of regenerating from the freshly-imported local DB settings.
+   * Deleting them here forces regeneration on first page load.
+   */
+  async clearThemeCssCache(localPath: string): Promise<void> {
+    const cacheDirs = [
+      path.join(localPath, 'wp-content', 'uploads', 'astra'),
+      path.join(localPath, 'wp-content', 'uploads', 'uag-plugin'),
+      path.join(localPath, 'wp-content', 'uploads', 'hummingbird-assets'),
+    ];
+
+    for (const dir of cacheDirs) {
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        await Promise.all(
+          entries
+            .filter(e => e.isFile())
+            .map(e => fs.unlink(path.join(dir, e.name)).catch(() => {}))
+        );
+        logger.info(`[DockerManager] Cleared theme CSS cache: ${path.basename(dir)}`);
+      } catch {
+        // Directory doesn't exist — nothing to clear
+      }
+    }
   }
 
   /**
@@ -442,11 +589,11 @@ add_action( 'phpmailer_init', function ( $phpmailer ) {
       - ${safeVolumeName}_db:/var/lib/mysql
       - ./.localdock/db.sql:/docker-entrypoint-initdb.d/db.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "mysql -uwordpress -pwordpress wordpress -e 'SHOW TABLES' 2>/dev/null | grep -q 'localdock_ready'"]
       interval: 5s
-      timeout: 10s
-      retries: 10
-      start_period: 120s
+      timeout: 15s
+      retries: 60
+      start_period: 60s
     restart: unless-stopped
 
   mailpit:
@@ -502,6 +649,8 @@ volumes:
           const manifest = JSON.parse(raw) as SiteManifest;
           if (manifest.localPort) {
             used.add(manifest.localPort);
+            used.add(manifest.localPort + 1);
+            used.add(manifest.localPort + 2);
           }
         } catch {
           // No manifest or unreadable — skip

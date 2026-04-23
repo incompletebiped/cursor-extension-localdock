@@ -9,7 +9,7 @@ import { DockerManager } from '../docker/DockerManager';
 import { DatabaseSyncer } from '../sync/DatabaseSyncer';
 import { SiteRegistry } from '../SiteRegistry';
 import { readManifest, writeManifest } from '../sync/Manifest';
-import { handleError } from '../utils/errors';
+import { handleError, LocalDockError, LocalDockErrorCode } from '../utils/errors';
 import { logger } from '../utils/logger';
 
 export async function startLocal(
@@ -33,14 +33,6 @@ export async function startLocal(
     return;
   }
 
-  // Check Docker is available
-  try {
-    await dockerManager.assertDockerAvailable();
-  } catch (err) {
-    handleError('startLocal', err);
-    return;
-  }
-
   const { id: opId } = activityManager.start(site.domain, site.serverId, 'start-local');
 
   // Update state to starting
@@ -53,6 +45,39 @@ export async function startLocal(
   localDockerTreeProvider.refresh();
 
   try {
+    // Ensure Docker is installed and the daemon is running; auto-launch if needed
+    const version = await dockerManager.getDockerVersion();
+    if (version === null) {
+      throw new LocalDockError(
+        'Docker Desktop is not installed or not in PATH. Download it from https://www.docker.com/products/docker-desktop',
+        LocalDockErrorCode.DOCKER_NOT_FOUND,
+        false
+      );
+    }
+
+    if (!(await dockerManager.isDaemonRunning())) {
+      activityManager.update(opId, 2, 'Launching Docker Desktop…');
+      dockerManager.launchDockerDesktop();
+
+      let started = false;
+      for (let i = 0; i < 30; i++) {
+        await new Promise<void>(r => setTimeout(r, 2000));
+        if (await dockerManager.isDaemonRunning()) {
+          started = true;
+          break;
+        }
+        activityManager.update(opId, 3, `Waiting for Docker Desktop to start… (${(i + 1) * 2}s)`);
+      }
+
+      if (!started) {
+        throw new LocalDockError(
+          'Docker Desktop did not start in time. Please open it manually and try again.',
+          LocalDockErrorCode.DOCKER_NOT_FOUND,
+          true
+        );
+      }
+    }
+
     // Read manifest
     const manifest = await readManifest(site.localPath);
 
@@ -80,11 +105,23 @@ export async function startLocal(
       await fs.writeFile(sqlPath, '', 'utf-8');
     }
 
-    activityManager.update(opId, 20, 'Rewriting database URLs…');
+    activityManager.update(opId, 20, 'Preparing database…');
 
-    // On first start OR when a fresh compose was just created: wipe stale volumes and re-process db.sql
+    // Write the production URL so the mu-plugin can replace it with the local URL
+    // on first WordPress boot using PHP's own serialization functions. This avoids
+    // the byte-count corruption that raw SQL text replacement causes for serialized
+    // values like astra-settings that contain single quotes (e.g. CSS url('...')).
+    const productionUrl = `https://${site.domain}`;
+    await fs.writeFile(
+      path.join(site.localPath, '.localdock', 'production-url'),
+      productionUrl,
+      'utf-8'
+    );
+
+    // On first start, when a fresh compose was created, or when the port changed: wipe stale volumes and re-process db.sql
     const dbUrlRewritten = manifest?.dbUrlRewritten ?? false;
-    if (!dbUrlRewritten || composeWasCreated) {
+    const portChanged = manifest?.localPort !== undefined && manifest.localPort !== port;
+    if (!dbUrlRewritten || composeWasCreated || portChanged) {
       activityManager.update(opId, 22, 'Clearing stale Docker volumes…');
       await dockerManager.reset(site.localPath);
 
@@ -93,9 +130,8 @@ export async function startLocal(
 
       try {
         await fs.access(sqlPath);
-        const productionUrl = `https://${site.domain}`;
-        await DatabaseSyncer.rewriteUrlsInDump(sqlPath, productionUrl, localUrl);
         await DatabaseSyncer.stripDatabaseStatements(sqlPath);
+        await DatabaseSyncer.appendSentinel(sqlPath);
         const updatedManifest = await readManifest(site.localPath);
         if (updatedManifest) {
           await writeManifest(site.localPath, { ...updatedManifest, localPort: port, dbUrlRewritten: true });
@@ -120,25 +156,26 @@ export async function startLocal(
     activityManager.update(opId, 49, 'Configuring dev environment…');
     await dockerManager.scaffoldDevPlugin(site.localPath);
 
+    // Remove any persistent object-cache drop-in pulled from production.
+    // Production sites often use Redis/Memcached via object-cache.php.  In Docker
+    // those servers don't exist, so the drop-in silently returns false for every
+    // option read — including astra-settings — even though the data is in MySQL.
+    const objectCachePath = path.join(site.localPath, 'wp-content', 'object-cache.php');
+    await fs.unlink(objectCachePath).catch(() => {});
+
+    activityManager.update(opId, 49, 'Clearing stale theme CSS cache…');
+    await dockerManager.clearThemeCssCache(site.localPath);
+    // Write trigger file so the dev mu-plugin clears transients on first WordPress boot
+    await fs.writeFile(path.join(site.localPath, '.localdock', 'needs-init'), '', 'utf-8');
+
     activityManager.update(opId, 50, 'Starting Docker containers…');
+    // docker compose up --wait blocks until all services are running/healthy
     await dockerManager.start(site.localPath);
 
-    // Poll for running status
-    activityManager.update(opId, 60, 'Waiting for containers to be ready…');
-    const maxAttempts = 30;
-    let attempts = 0;
-    let status = await dockerManager.getStatus(site.localPath);
-
-    while (status !== 'running' && attempts < maxAttempts) {
-      await delay(2000);
-      status = await dockerManager.getStatus(site.localPath);
-      attempts++;
-      const progress = 60 + Math.floor((attempts / maxAttempts) * 35);
-      activityManager.update(opId, progress, `Waiting for containers… (${attempts * 2}s)`);
-    }
-
+    activityManager.update(opId, 95, 'Verifying containers…');
+    const status = await dockerManager.getStatus(site.localPath);
     if (status !== 'running') {
-      throw new Error('Containers did not reach running state within 60 seconds');
+      throw new Error(`Containers did not reach running state (status: ${status})`);
     }
 
     activityManager.complete(opId);
@@ -152,14 +189,10 @@ export async function startLocal(
     siteTreeProvider.updateSiteState(runningSite);
     localDockerTreeProvider.refresh();
 
-    // Notify user
-    const choice = await vscode.window.showInformationMessage(
-      `Local environment for ${site.domain} is running at ${localUrl}`,
-      'Open in Browser'
-    );
-    if (choice === 'Open in Browser') {
-      vscode.commands.executeCommand('localdockCpanel.openLocalSite', { site: runningSite });
-    }
+    // Auto-open in Cursor browser
+    void vscode.commands.executeCommand('simpleBrowser.show', localUrl);
+
+    void vscode.window.showInformationMessage(`${site.domain} running at ${localUrl}`);
 
   } catch (err) {
     activityManager.fail(opId, err instanceof Error ? err.message : String(err));
@@ -179,6 +212,3 @@ export async function startLocal(
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}

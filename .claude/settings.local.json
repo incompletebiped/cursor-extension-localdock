@@ -20,7 +20,16 @@
       "Bash(ls -la dist/)",
       "Bash(ls -la out/)",
       "Bash(docker system df *)",
-      "Bash(docker run *)"
+      "Bash(docker run *)",
+      "Bash(xargs grep *)",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('C:/Users/baile/AppData/Roaming/Cursor/User/globalStorage/storage.json'\\)\\); [print\\(k,'=',str\\(v\\)[:200]\\) for k,v in d.items\\(\\) if 'localdock' in k.lower\\(\\) or 'localPath' in str\\(v\\) or 'bamstea' in str\\(v\\)]\")",
+      "Bash(sqlite3 *)",
+      "Bash(python3 *)",
+      "Bash(ls \"H:\\\\\\\\SMB Local Sites\")",
+      "Bash(ls \"H:\\\\\\\\SMB Local Sites\\\\\\\\wp-ai-gen\\\\\\\\.localdock\")",
+      "Bash(ls \"H:\\\\\\\\SMB Local Sites\\\\\\\\test-site\\\\\\\\.localdock\")",
+      "Bash(cmd /c \"dir /s /b \\\\\"H:\\\\SMB Local Sites\\\\\" | findstr db.sql\")",
+      "Bash(cmd *)"
     ]
   }
 }

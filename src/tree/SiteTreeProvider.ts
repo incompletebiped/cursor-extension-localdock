@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs/promises';
 import { SiteRegistry } from '../SiteRegistry';
 import { CredentialManager } from '../auth/CredentialManager';
 import { ConfigManager } from '../utils/configManager';
@@ -112,55 +113,73 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
         );
       }
 
-      const sitePromises = domains.map(async (domain) => {
-        let wp = null;
+      try {
+        const sitePromises = domains.map(async (domain) => {
+          let wp = null;
 
-        if (sshAvailable) {
-          wp = await cpanel.detectWordPress(sftp, ssh, domain).catch((err: Error) => {
-            logger.warn(`[SiteTreeProvider] SSH detection failed for ${domain.domain}: ${err.message}`);
-            return null;
-          });
+          if (sshAvailable) {
+            wp = await cpanel.detectWordPress(sftp, ssh, domain).catch((err: Error) => {
+              logger.warn(`[SiteTreeProvider] SSH detection failed for ${domain.domain}: ${err.message}`);
+              return null;
+            });
+          }
+
+          // Fall back to API detection if SSH didn't work
+          if (!wp) {
+            wp = await cpanel.detectWordPressViaApi(domain).catch((err: Error) => {
+              logger.warn(`[SiteTreeProvider] API detection failed for ${domain.domain}: ${err.message}`);
+              return null;
+            });
+          }
+
+          if (!wp) { return null; }
+
+          const existing = this.registry.getSites(serverId).find((s) => s.domain === domain.domain);
+
+          // Validate that the previously-pulled folder still exists on disk.
+          // If the user deleted it outside the extension, reset to not_pulled.
+          let localPath = existing?.localPath;
+          let syncState = existing?.syncState ?? { status: 'not_pulled' as const };
+          let localEnv = existing?.localEnv;
+          if (localPath) {
+            try {
+              await fs.access(localPath);
+            } catch {
+              localPath = undefined;
+              syncState = { status: 'not_pulled' as const };
+              localEnv = undefined;
+            }
+          }
+
+          const site: WordPressSite = {
+            id: `${serverId}::${domain.domain}`,
+            serverId,
+            domain: domain.domain,
+            docroot: domain.docroot,
+            wpVersion: wp.wpVersion,
+            dbName: wp.dbName,
+            dbUser: wp.dbUser,
+            dbHost: wp.dbHost,
+            dbPass: wp.dbPass,
+            localPath,
+            syncState,
+            localEnv,
+            detectedAt: new Date().toISOString(),
+          };
+
+          return site;
+        });
+
+        const results = await Promise.all(sitePromises);
+        const sites = results.filter((s): s is WordPressSite => s !== null);
+
+        await this.registry.setSites(serverId, sites);
+        logger.info(`[SiteTreeProvider] Found ${sites.length} WP sites on ${server.host}`);
+      } finally {
+        if (ssh.isConnected) {
+          sftp.close();
+          await ssh.disconnect();
         }
-
-        // Fall back to API detection if SSH didn't work
-        if (!wp) {
-          wp = await cpanel.detectWordPressViaApi(domain).catch((err: Error) => {
-            logger.warn(`[SiteTreeProvider] API detection failed for ${domain.domain}: ${err.message}`);
-            return null;
-          });
-        }
-
-        if (!wp) { return null; }
-
-        const existing = this.registry.getSites(serverId).find((s) => s.domain === domain.domain);
-
-        const site: WordPressSite = {
-          id: `${serverId}::${domain.domain}`,
-          serverId,
-          domain: domain.domain,
-          docroot: domain.docroot,
-          wpVersion: wp.wpVersion,
-          dbName: wp.dbName,
-          dbUser: wp.dbUser,
-          dbHost: wp.dbHost,
-          dbPass: wp.dbPass,
-          localPath: existing?.localPath,
-          syncState: existing?.syncState ?? { status: 'not_pulled' },
-          detectedAt: new Date().toISOString(),
-        };
-
-        return site;
-      });
-
-      const results = await Promise.all(sitePromises);
-      const sites = results.filter((s): s is WordPressSite => s !== null);
-
-      await this.registry.setSites(serverId, sites);
-      logger.info(`[SiteTreeProvider] Found ${sites.length} WP sites on ${server.host}`);
-
-      if (sshAvailable) {
-        sftp.close();
-        await ssh.disconnect();
       }
     } catch (err) {
       logger.error(

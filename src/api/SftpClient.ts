@@ -67,7 +67,11 @@ export class SftpClient {
     onProgress?: (fileCount: number) => void
   ): Promise<RemoteFileEntry[]> {
     const results: RemoteFileEntry[] = [];
-    await this.walkDir(remoteBase, remoteBase, excludePatterns, results, onProgress ?? (() => {}));
+    let fileCount = 0;
+    await this.walkDir(remoteBase, remoteBase, excludePatterns, results, (delta) => {
+      fileCount += delta;
+      onProgress?.(fileCount);
+    });
     return results;
   }
 
@@ -76,7 +80,7 @@ export class SftpClient {
     current: string,
     excludePatterns: string[],
     results: RemoteFileEntry[],
-    onProgress: (count: number) => void
+    onProgress: (delta: number) => void
   ): Promise<void> {
     let entries: ssh2.FileEntry[];
     try {
@@ -108,7 +112,7 @@ export class SftpClient {
       if (isDirectory) {
         subdirs.push(fullPath);
       } else {
-        onProgress(results.filter(r => !r.isDirectory).length);
+        onProgress(1);
       }
     }
 

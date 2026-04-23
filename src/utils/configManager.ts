@@ -40,6 +40,10 @@ export class ConfigManager {
       '*.log',
       '.DS_Store',
       'node_modules/**',
+      // Drop-ins that talk to production infrastructure (Redis, Memcached, custom DB)
+      // and will silently break local option reads when those servers aren't in Docker.
+      'wp-content/object-cache.php',
+      'wp-content/db.php',
     ]);
   }
 
@@ -82,6 +86,8 @@ export class ConfigManager {
       'wp-content/uploads/.htaccess',
       'wp-content/mu-plugins/localdock-mail.php',
       'wp-content/mu-plugins/localdock-dev-env.php',
+      'wp-content/object-cache.php',
+      'wp-content/db.php',
     ];
   }
 

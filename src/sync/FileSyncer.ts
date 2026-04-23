@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { SftpClient, RemoteFileEntry } from '../api/SftpClient';
-import { SiteManifest, ManifestFileEntry } from '../models/Manifest';
+import { SiteManifest } from '../models/Manifest';
 import { Semaphore } from '../utils/progressUtils';
 import { logger } from '../utils/logger';
 
@@ -45,11 +45,10 @@ export class FileSyncer {
 
     logger.info(`[FileSyncer] Found ${total} files to download`);
 
-    // Create local directories first
-    for (const dir of dirs) {
-      const localDir = path.join(localBase, dir.relativePath);
-      await fs.mkdir(localDir, { recursive: true });
-    }
+    // Create local directories first (parallel)
+    await Promise.all(dirs.map(dir =>
+      fs.mkdir(path.join(localBase, dir.relativePath), { recursive: true })
+    ));
 
     const semaphore = new Semaphore(this.maxConcurrent);
     const fileIndex: SiteManifest['fileIndex'] = {};

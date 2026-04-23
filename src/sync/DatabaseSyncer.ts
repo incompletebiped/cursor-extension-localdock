@@ -339,6 +339,20 @@ export class DatabaseSyncer {
     logger.info('[DatabaseSyncer] Stripped database statements from dump');
   }
 
+  /**
+   * Append a sentinel table to the end of a SQL dump file.
+   * The healthcheck queries for this table to confirm the full import is done.
+   * Idempotent — safe to call if the sentinel is already present.
+   */
+  static async appendSentinel(sqlPath: string): Promise<void> {
+    const sentinel =
+      '\n-- LocalDock initialization sentinel (do not remove)\n' +
+      'CREATE TABLE IF NOT EXISTS `_localdock_ready` (`id` tinyint(1) NOT NULL DEFAULT \'1\');\n' +
+      'INSERT IGNORE INTO `_localdock_ready` (`id`) VALUES (1);\n';
+    await fs.appendFile(sqlPath, sentinel, 'utf-8');
+    logger.info('[DatabaseSyncer] Appended initialization sentinel to db.sql');
+  }
+
   /** Split a DB_HOST value that may contain an embedded port (e.g. "localhost:3306") */
   private parseDbHost(dbHost: string): { host: string; port: string } {
     // Guard against IPv6 addresses like "[::1]:3306"

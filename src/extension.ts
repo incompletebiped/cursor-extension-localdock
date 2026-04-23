@@ -49,10 +49,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const serverTreeProvider = new ServerTreeProvider(registry);
   const siteTreeProvider = new SiteTreeProvider(registry, credManager, configManager);
   const activityTreeProvider = new ActivityTreeProvider(activityManager);
-  const localDockerTreeProvider = new LocalDockerTreeProvider(dockerManager, registry, configManager);
+  const localDockerTreeProvider = new LocalDockerTreeProvider(dockerManager, registry);
 
   // Reset stale states and validate local paths on startup
-  for (const site of registry.getAllSites()) {
+  await Promise.all(registry.getAllSites().map(async (site) => {
     const s = site.syncState.status;
 
     // If files were deleted outside the extension, reset to not_pulled
@@ -66,7 +66,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           localEnv: undefined,
           syncState: { status: 'not_pulled' },
         });
-        continue;
+        return;
       }
     }
 
@@ -80,19 +80,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     // Reset in-progress states that were interrupted
     if (s === 'pulling' || s === 'pushing') {
-      siteTreeProvider.updateSiteState({
+      await siteTreeProvider.updateSiteState({
         ...site,
         syncState: { status: 'not_pulled' },
-      }).catch(() => {});
+      });
     }
     const ls = site.localEnv?.status;
     if (ls === 'starting' || ls === 'stopping') {
-      registry.updateSite({
+      await registry.updateSite({
         ...site,
         localEnv: { ...site.localEnv, status: 'stopped' },
-      }).catch(() => {});
+      });
     }
-  }
+  }));
 
 
   context.subscriptions.push(
@@ -187,6 +187,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     vscode.commands.registerCommand('localdockCpanel.openDockerSetup', () => {
       vscode.env.openExternal(vscode.Uri.parse('https://www.docker.com/products/docker-desktop'));
+    }),
+
+    vscode.commands.registerCommand('localdockCpanel.launchDockerDesktop', () => {
+      dockerManager.launchDockerDesktop();
+      vscode.window.showInformationMessage('Launching Docker Desktop…');
+      localDockerTreeProvider.refresh();
     })
   );
 

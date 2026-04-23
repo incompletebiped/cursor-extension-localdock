@@ -33,7 +33,7 @@ export class ActivityManager {
       id, domain, serverId, type,
       status: 'running',
       progress: 0,
-      message: type === 'pull' ? 'Starting pull…' : type === 'push' ? 'Starting push…' : type === 'start-local' ? 'Starting local environment…' : 'Stopping local environment…',
+      message: type === 'pull' ? 'Starting pull…' : type === 'push' ? 'Starting push…' : type === 'start-local' ? 'Starting local environment…' : type === 'stop-local' ? 'Stopping local environment…' : 'Checking remote…',
       startedAt: new Date(),
     };
     this.running.set(id, { op, tokenSource });

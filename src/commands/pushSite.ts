@@ -136,7 +136,7 @@ export async function pushSite(
         if (message) {
           const match = message.match(/\((\d+) \/ (\d+)\)/);
           const pct = match
-            ? Math.round((parseInt(match[1]) / parseInt(match[2])) * 70) + 10 // 10–80%
+            ? Math.round((parseInt(match[1], 10) / parseInt(match[2], 10)) * 70) + 10 // 10–80%
             : undefined;
           report(pct ?? activityManager.getRunning().find(o => o.id === opId)?.progress ?? 0, message);
         }

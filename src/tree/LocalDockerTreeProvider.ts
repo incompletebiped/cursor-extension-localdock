@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { DockerManager } from '../docker/DockerManager';
 import { SiteRegistry } from '../SiteRegistry';
-import { ConfigManager } from '../utils/configManager';
 import { LocalEnvStatus } from '../models/LocalEnvState';
 import { WordPressSite } from '../models/Site';
 
@@ -10,23 +9,29 @@ import { WordPressSite } from '../models/Site';
 // ---------------------------------------------------------------------------
 
 class DockerStatusItem extends vscode.TreeItem {
-  constructor(version: string | null) {
-    const label = version ? 'Docker Desktop' : 'Docker not installed';
+  constructor(version: string | null, daemonRunning: boolean) {
+    const label = !version ? 'Docker not installed'
+      : !daemonRunning ? 'Docker not running'
+      : 'Docker Desktop';
     super(label, vscode.TreeItemCollapsibleState.None);
-    this.contextValue = version ? 'dockerInstalled' : 'dockerMissing';
 
-    if (version) {
-      this.iconPath = new vscode.ThemeIcon('check', new vscode.ThemeColor('charts.green'));
-      this.description = version;
-      this.tooltip = `Docker ${version} is available`;
-    } else {
+    if (!version) {
+      this.contextValue = 'dockerMissing';
       this.iconPath = new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground'));
       this.description = 'Click to install';
       this.tooltip = 'Docker Desktop is required for local WordPress environments.\nClick to open the download page.';
-      this.command = {
-        command: 'localdockCpanel.openDockerSetup',
-        title: 'Install Docker Desktop',
-      };
+      this.command = { command: 'localdockCpanel.openDockerSetup', title: 'Install Docker Desktop' };
+    } else if (!daemonRunning) {
+      this.contextValue = 'dockerStopped';
+      this.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('charts.yellow'));
+      this.description = 'Click to start';
+      this.tooltip = 'Docker Desktop is installed but not running.\nClick to launch it.';
+      this.command = { command: 'localdockCpanel.launchDockerDesktop', title: 'Launch Docker Desktop' };
+    } else {
+      this.contextValue = 'dockerInstalled';
+      this.iconPath = new vscode.ThemeIcon('check', new vscode.ThemeColor('charts.green'));
+      this.description = version;
+      this.tooltip = `Docker ${version} is running`;
     }
   }
 }
@@ -88,8 +93,7 @@ export class LocalDockerTreeProvider implements vscode.TreeDataProvider<LocalDoc
 
   constructor(
     private readonly dockerManager: DockerManager,
-    private readonly registry: SiteRegistry,
-    private readonly _configManager: ConfigManager
+    private readonly registry: SiteRegistry
   ) {}
 
   refresh(): void {
@@ -103,9 +107,12 @@ export class LocalDockerTreeProvider implements vscode.TreeDataProvider<LocalDoc
   async getChildren(_element?: LocalDockerNode): Promise<LocalDockerNode[]> {
     const nodes: LocalDockerNode[] = [];
 
-    // Docker status
-    const version = await this.dockerManager.getDockerVersion();
-    nodes.push(new DockerStatusItem(version));
+    // Docker status — check version and daemon in parallel
+    const [version, daemonRunning] = await Promise.all([
+      this.dockerManager.getDockerVersion(),
+      this.dockerManager.isDaemonRunning(),
+    ]);
+    nodes.push(new DockerStatusItem(version, daemonRunning));
 
     // Pulled sites with local env
     const allSites = this.registry.getAllSites();

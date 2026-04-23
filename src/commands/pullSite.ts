@@ -98,7 +98,7 @@ export async function pullSite(
           // Extract percentage from messages like "Downloading files… (42 / 100)"
           const match = message.match(/\((\d+) \/ (\d+)\)/);
           const pct = match
-            ? Math.round((parseInt(match[1]) / parseInt(match[2])) * 80) + 10 // 10–90%
+            ? Math.round((parseInt(match[1], 10) / parseInt(match[2], 10)) * 80) + 10 // 10–90%
             : undefined;
           report(pct ?? activityManager.getRunning().find(o => o.id === opId)?.progress ?? 0, message);
         }
