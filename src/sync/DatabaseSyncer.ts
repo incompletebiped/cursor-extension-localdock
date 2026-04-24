@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import * as child_process from 'child_process';
 import * as util from 'util';
 import * as readline from 'readline';
@@ -93,8 +94,7 @@ export class DatabaseSyncer {
     site: WordPressSite,
     localSitePath: string,
     onProgress?: (message: string) => void,
-    localUrl?: string,
-    productionUrl?: string
+    sourceSqlPath?: string
   ): Promise<void> {
     if (!isValidDbIdentifier(site.dbName)) {
       throw new LocalDockError(
@@ -104,11 +104,11 @@ export class DatabaseSyncer {
       );
     }
 
-    const localSqlPath = path.join(localSitePath, '.localdock', 'db.sql');
+    const localSqlPath = sourceSqlPath ?? path.join(localSitePath, '.localdock', 'db.sql');
     const tmpRemote = `/tmp/localdock_push_${site.dbName}_${Date.now()}.sql`;
 
-    // Re-export from local MySQL if we have local DB credentials
-    if (this.localDb.password !== undefined) {
+    // Re-export from local MySQL only if no Docker dump was provided
+    if (!sourceSqlPath && this.localDb.password !== undefined) {
       onProgress?.('Exporting local database…');
       const localDbName = sanitizeDbName(site.domain);
       await this.exportLocalDb(localDbName, localSqlPath);
@@ -125,26 +125,11 @@ export class DatabaseSyncer {
       );
     }
 
-    // Rewrite localhost URLs back to production before uploading
-    let uploadPath = localSqlPath;
-    let rewrittenDump: string | null = null;
-    if (localUrl && productionUrl && localUrl !== productionUrl) {
-      onProgress?.('Rewriting database URLs for production…');
-      rewrittenDump = localSqlPath + '.push.tmp';
-      await fs.copyFile(localSqlPath, rewrittenDump);
-      await DatabaseSyncer.rewriteUrlsInDump(rewrittenDump, localUrl, productionUrl);
-      uploadPath = rewrittenDump;
-    }
-
-    // Upload dump
+    // Upload dump with localhost URLs intact — URL rewriting happens after import
+    // via fixUrlsOnServer() which uses PHP's own serialize/unserialize to avoid
+    // corrupting byte counts in PHP serialized options like astra-settings.
     onProgress?.('Uploading database dump…');
-    try {
-      await this.sftp.fastPut(uploadPath, tmpRemote);
-    } finally {
-      if (rewrittenDump) {
-        await fs.unlink(rewrittenDump).catch(() => {});
-      }
-    }
+    await this.sftp.fastPut(localSqlPath, tmpRemote);
 
     // Import on remote
     onProgress?.('Importing database on server…');
@@ -168,6 +153,116 @@ export class DatabaseSyncer {
         LocalDockErrorCode.DB_IMPORT_FAILED,
         true
       );
+    }
+  }
+
+  /**
+   * Replace localhost URLs with the production URL on the server using PHP's own
+   * unserialize/serialize so byte counts in PHP serialized options (astra-settings,
+   * theme-mods, etc.) are always correct. Raw SQL text replacement corrupts these
+   * counts and causes unserialize() to return false, resetting all customizer settings.
+   *
+   * Generates a minimal PHP script, uploads it to /tmp on the server, runs it via SSH,
+   * then removes it. Handles both serialized and plain-string option values.
+   */
+  async fixUrlsOnServer(
+    site: WordPressSite,
+    localUrl: string,
+    productionUrl: string,
+    onProgress?: (message: string) => void
+  ): Promise<void> {
+    const from = localUrl.replace(/\/$/, '');
+    const to = productionUrl.replace(/\/$/, '');
+    if (!from || !to || from === to) { return; }
+
+    onProgress?.('Rewriting production URLs…');
+    logger.info(`[DatabaseSyncer] fixUrlsOnServer: ${from} → ${to}`);
+
+    // Detect PHP binary across common cPanel EasyApache paths
+    const { host: dbHost, port: dbPort } = this.parseDbHost(site.dbHost);
+    const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+    // Wrap everything in try/catch so errors always produce output even with display_errors=Off
+    const script = `<?php
+ini_set('display_errors','1');
+try {
+$pdo=new PDO('mysql:host=${esc(dbHost)};port=${dbPort};dbname=${esc(site.dbName)};charset=utf8mb4','${esc(site.dbUser)}','${esc(site.dbPass)}',array(PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION));
+$f='${esc(from)}';$t='${esc(to)}';
+// Auto-detect table prefix by finding the *_options table
+$tbl=$pdo->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME LIKE '%_options' LIMIT 1")->fetchColumn();
+if(!$tbl){throw new Exception('Could not find WordPress options table');}
+$pfx=substr($tbl,0,strlen($tbl)-7);
+function ld_r($d,$f,$t){
+  if(is_array($d)){$o=array();foreach($d as $k=>$v){$o[is_string($k)?str_replace($f,$t,$k):$k]=ld_r($v,$f,$t);}return $o;}
+  if(is_object($d)){if(get_class($d)==='__PHP_Incomplete_Class'){return $d;}foreach(get_object_vars($d)as $k=>$v){$d->$k=ld_r($v,$f,$t);}return $d;}
+  return is_string($d)?str_replace($f,$t,$d):$d;
+}
+function ld_fix($pdo,$table,$id,$val,$f,$t){
+  $s=$pdo->prepare("SELECT $id,$val FROM $table WHERE $val LIKE ?");
+  $s->execute(array('%'.$f.'%'));$n=0;
+  foreach($s->fetchAll(PDO::FETCH_OBJ)as $r){
+    $raw=$r->$val;$dec=@unserialize($raw);
+    $new=($dec!==false||$raw==='b:0;')?serialize(ld_r($dec,$f,$t)):str_replace($f,$t,$raw);
+    if($new!==$raw){$u=$pdo->prepare("UPDATE $table SET $val=? WHERE $id=?");$u->execute(array($new,$r->$id));$n++;}
+  }
+  return $n;
+}
+$n=ld_fix($pdo,$pfx.'options','option_name','option_value',$f,$t);
+$n+=ld_fix($pdo,$pfx.'postmeta','meta_id','meta_value',$f,$t);
+echo "ok:".$n;
+} catch(Exception $e){echo "error:".$e->getMessage();exit(1);}
+`;
+
+    const stamp = Date.now();
+    const localTmp = path.join(os.tmpdir(), `localdock_urlfix_${stamp}.php`);
+    const remoteTmp = `/tmp/localdock_urlfix_${stamp}.php`;
+
+    await fs.writeFile(localTmp, script, 'utf-8');
+    try {
+      await this.sftp.fastPut(localTmp, remoteTmp);
+
+      // Step 1: find PHP binary (separate exec so we can log what was found)
+      const findCmd =
+        `PHP_BIN=""; ` +
+        `for p in php php8 php82 php81 php80 php74 /usr/local/bin/php /usr/bin/php; do ` +
+        `  command -v "$p" >/dev/null 2>&1 && PHP_BIN=$(command -v "$p") && break; ` +
+        `done; ` +
+        `if [ -z "$PHP_BIN" ]; then ` +
+        `  for f in /opt/cpanel/ea-php*/root/usr/bin/php; do ` +
+        `    [ -x "$f" ] && PHP_BIN="$f" && break; ` +
+        `  done; ` +
+        `fi; ` +
+        `echo "$PHP_BIN"`;
+
+      const findResult = await this.ssh.exec(findCmd);
+      const phpBin = findResult.stdout.trim();
+      logger.info(`[DatabaseSyncer] fixUrlsOnServer PHP binary: "${phpBin || '(none found)'}"`);
+
+      if (!phpBin) {
+        throw new LocalDockError(
+          'No PHP binary found on the server. Contact your host to add PHP to your SSH PATH.',
+          LocalDockErrorCode.DB_IMPORT_FAILED,
+          true
+        );
+      }
+
+      // Step 2: run script with the found binary
+      const result = await this.ssh.exec(`"${phpBin}" ${remoteTmp} 2>&1`);
+      const out = result.stdout.trim();
+      logger.info(`[DatabaseSyncer] fixUrlsOnServer PHP output: "${out}"`);
+
+      if (!out.startsWith('ok')) {
+        throw new LocalDockError(
+          `Production URL rewrite failed: ${out || result.stderr.trim() || '(no output)'}`,
+          LocalDockErrorCode.DB_IMPORT_FAILED,
+          true
+        );
+      }
+      const count = out.split(':')[1] ?? '?';
+      logger.info(`[DatabaseSyncer] fixUrlsOnServer: updated ${count} rows`);
+    } finally {
+      await fs.unlink(localTmp).catch(() => {});
+      await this.ssh.exec(`rm -f ${remoteTmp}`).catch(() => {});
     }
   }
 

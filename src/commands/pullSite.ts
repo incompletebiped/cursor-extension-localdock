@@ -67,10 +67,10 @@ export async function pullSite(
 
   const report = (progress: number, message: string) => {
     activityManager.update(opId, progress, message);
-    siteTreeProvider.updateSiteState({
+    siteTreeProvider.setTransientState({
       ...updatedSite,
       syncState: { status: 'pulling', progress, message },
-    }).catch(() => {});
+    });
   };
 
   try {

@@ -29,7 +29,10 @@
       "Bash(ls \"H:\\\\\\\\SMB Local Sites\\\\\\\\wp-ai-gen\\\\\\\\.localdock\")",
       "Bash(ls \"H:\\\\\\\\SMB Local Sites\\\\\\\\test-site\\\\\\\\.localdock\")",
       "Bash(cmd /c \"dir /s /b \\\\\"H:\\\\SMB Local Sites\\\\\" | findstr db.sql\")",
-      "Bash(cmd *)"
+      "Bash(cmd *)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.contributes.menus['view/item/context'], null, 2\\)\\)\")",
+      "Bash(node -e \"const p = JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); console.log\\('main:', p.main\\); console.log\\('scripts:', JSON.stringify\\(p.scripts, null, 2\\)\\)\")",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('main:', p.main\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")"
     ]
   }
 }

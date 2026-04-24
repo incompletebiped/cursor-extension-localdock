@@ -38,15 +38,30 @@ class DockerStatusItem extends vscode.TreeItem {
 
 export class LocalEnvItem extends vscode.TreeItem {
   constructor(public readonly site: WordPressSite) {
-    super(site.domain, vscode.TreeItemCollapsibleState.None);
-
     const localStatus = site.localEnv?.status ?? 'stopped';
-    const isInitialized = !!site.localEnv?.port;
+    const isRunning = localStatus === 'running' && !!site.localEnv?.port;
+    super(site.domain, isRunning ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
 
+    const isInitialized = !!site.localEnv?.port;
     this.contextValue = `localEnvItem localEnv_${localStatus}`;
     this.iconPath = iconForLocalStatus(localStatus, isInitialized);
     this.description = descriptionForLocalStatus(site);
     this.tooltip = buildLocalEnvTooltip(site);
+  }
+}
+
+class ServiceLinkItem extends vscode.TreeItem {
+  constructor(label: string, icon: string, url: string, hint?: string) {
+    super(label, vscode.TreeItemCollapsibleState.None);
+    this.contextValue = 'serviceLink';
+    this.iconPath = new vscode.ThemeIcon(icon);
+    this.description = hint ?? url;
+    this.tooltip = hint ? `${url}\n${hint}` : url;
+    this.command = {
+      command: 'simpleBrowser.show',
+      title: `Open ${label}`,
+      arguments: [url],
+    };
   }
 }
 
@@ -79,6 +94,7 @@ class EmptyLocalItem extends vscode.TreeItem {
 type LocalDockerNode =
   | DockerStatusItem
   | LocalEnvItem
+  | ServiceLinkItem
   | SetupStepItem
   | SectionHeaderItem
   | EmptyLocalItem;
@@ -104,7 +120,19 @@ export class LocalDockerTreeProvider implements vscode.TreeDataProvider<LocalDoc
     return element;
   }
 
-  async getChildren(_element?: LocalDockerNode): Promise<LocalDockerNode[]> {
+  async getChildren(element?: LocalDockerNode): Promise<LocalDockerNode[]> {
+    if (element instanceof LocalEnvItem) {
+      const env = element.site.localEnv;
+      if (env?.status === 'running' && env.port) {
+        return [
+          new ServiceLinkItem('Open Site', 'browser', `http://localhost:${env.port}`),
+          new ServiceLinkItem('Mailpit', 'mail', `http://localhost:${env.port + 1}`),
+          new ServiceLinkItem('Adminer', 'database', `http://localhost:${env.port + 2}/?server=db&username=wordpress&db=wordpress`, 'server: db  user: wordpress  pass: wordpress'),
+        ];
+      }
+      return [];
+    }
+
     const nodes: LocalDockerNode[] = [];
 
     // Docker status — check version and daemon in parallel

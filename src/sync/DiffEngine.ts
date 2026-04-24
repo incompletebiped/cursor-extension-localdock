@@ -60,7 +60,7 @@ export class DiffEngine {
     }
 
     for (const manifestPath of Object.keys(manifest.fileIndex)) {
-      if (!localSet.has(manifestPath)) {
+      if (!localSet.has(manifestPath) && !isExcluded(manifestPath, [...excludePatterns, '.localdock'])) {
         deleted.push(manifestPath);
       }
     }
@@ -125,6 +125,16 @@ export class DiffEngine {
   }
 }
 
+function isExcluded(relativePath: string, patterns: string[]): boolean {
+  return patterns.some(pattern => {
+    const base = pattern.endsWith('/**') ? pattern.slice(0, -3) : pattern;
+    if (base.startsWith('*.')) {
+      return relativePath.endsWith(base.slice(1));
+    }
+    return relativePath === base || relativePath.startsWith(base + '/');
+  });
+}
+
 async function walkDir(
   base: string,
   current: string,
@@ -143,7 +153,7 @@ async function walkDir(
     const fullPath = path.join(current, entry.name);
     const relativePath = fullPath.slice(base.length + 1).replace(/\\/g, '/');
 
-    if (exclude.some((ex) => relativePath === ex || relativePath.startsWith(ex + '/'))) {
+    if (isExcluded(relativePath, exclude)) {
       continue;
     }
 

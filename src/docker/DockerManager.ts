@@ -150,6 +150,29 @@ export class DockerManager {
     await fs.unlink(composePath).catch(() => {});
   }
 
+  /**
+   * Start only the `db` service and wait for it to be healthy.
+   * Used during push when the full environment is not running — we need
+   * mysqldump access without booting WordPress, Mailpit, and Adminer.
+   */
+  async startDbOnly(localPath: string): Promise<void> {
+    logger.info(`[DockerManager] Starting db-only for export at ${localPath}`);
+    const result = await this.spawnCompose(['up', '-d', '--wait', 'db'], localPath);
+    if (result.code !== 0) {
+      throw new LocalDockError(
+        `Failed to start database container: ${result.stderr}`,
+        LocalDockErrorCode.DOCKER_START_FAILED,
+        true
+      );
+    }
+  }
+
+  /** Stop the `db` service, leaving the volume intact. */
+  async stopDbOnly(localPath: string): Promise<void> {
+    await this.spawnCompose(['stop', 'db'], localPath).catch(() => {});
+    logger.info(`[DockerManager] Stopped db service at ${localPath}`);
+  }
+
   /** Stop the Docker Compose stack (docker compose down) */
   async stop(localPath: string): Promise<void> {
     logger.info(`[DockerManager] Stopping local environment at ${localPath}`);
@@ -161,6 +184,27 @@ export class DockerManager {
         true
       );
     }
+  }
+
+  /**
+   * Export the WordPress database from the running Docker MySQL container.
+   * Returns the raw SQL dump string. Throws if the container is not running or export fails.
+   */
+  async exportDatabase(localPath: string): Promise<string> {
+    // --no-tablespaces avoids the PROCESS privilege requirement introduced in MySQL 8.0.32
+    const result = await this.spawnCompose(
+      ['exec', '-T', 'db', 'mysqldump', '--single-transaction', '--no-tablespaces', '-uwordpress', '-pwordpress', 'wordpress'],
+      localPath
+    );
+    if (result.code !== 0) {
+      throw new LocalDockError(
+        `Docker mysqldump failed (exit ${result.code}): ${result.stderr.trim() || '(no stderr)'}`,
+        LocalDockErrorCode.DOCKER_START_FAILED,
+        true
+      );
+    }
+    logger.info(`[DockerManager] exportDatabase: dump size ${result.stdout.length} bytes`);
+    return result.stdout;
   }
 
   /** Get the current status of the Docker Compose stack */
@@ -254,6 +298,31 @@ export class DockerManager {
     let patched = original;
     for (const [pattern, replacement] of replacements) {
       patched = patched.replace(pattern, replacement);
+    }
+
+    // DB constants: if the regex replacement didn't produce the expected Docker value
+    // (e.g. original used a variable like define('DB_HOST', $db_host) instead of a
+    // string literal), prepend unconditional overrides at the top of the file.
+    // Prepending ensures our defines run BEFORE any original defines, so the Docker
+    // values always win regardless of how the production config sets them.
+    const dbOverrides: string[] = [];
+    if (!/define\s*\(\s*['"]DB_HOST['"]\s*,\s*['"]db['"]\s*\)/i.test(patched)) {
+      dbOverrides.push(`define( 'DB_HOST', 'db' );`);
+    }
+    if (!/define\s*\(\s*['"]DB_USER['"]\s*,\s*['"]wordpress['"]\s*\)/i.test(patched)) {
+      dbOverrides.push(`define( 'DB_USER', 'wordpress' );`);
+    }
+    if (!/define\s*\(\s*['"]DB_PASSWORD['"]\s*,\s*['"]wordpress['"]\s*\)/i.test(patched)) {
+      dbOverrides.push(`define( 'DB_PASSWORD', 'wordpress' );`);
+    }
+    if (!/define\s*\(\s*['"]DB_NAME['"]\s*,\s*['"]wordpress['"]\s*\)/i.test(patched)) {
+      dbOverrides.push(`define( 'DB_NAME', 'wordpress' );`);
+    }
+
+    if (dbOverrides.length > 0) {
+      const block = `// LocalDock Docker DB overrides\n${dbOverrides.join('\n')}`;
+      patched = patched.replace(/^(<\?php\s*)/i, `$1\n${block}\n\n`);
+      logger.warn(`[DockerManager] DB constants injected at top of wp-config.php (non-string-literal originals): ${dbOverrides.map(l => l.split("'")[1]).join(', ')}`);
     }
 
     // Build a block of constants that must be injected if absent in the original.

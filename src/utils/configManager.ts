@@ -77,17 +77,26 @@ export class ConfigManager {
    */
   get pushExcludePatterns(): string[] {
     return [
+      // Config files patched for local Docker — must never reach production
+      'wp-config.php',
+      '.htaccess',
+      // Generated / ephemeral
       'wp-content/cache/**',
       'wp-content/backup-db/**',
       '*.log',
       '.DS_Store',
       'node_modules/**',
       '.localdock/**',
+      // Local-only files written by this extension
       'wp-content/uploads/.htaccess',
       'wp-content/mu-plugins/localdock-mail.php',
       'wp-content/mu-plugins/localdock-dev-env.php',
       'wp-content/object-cache.php',
       'wp-content/db.php',
+      // Plugin-generated CSS caches — regenerate from DB on production, no need to push
+      'wp-content/uploads/astra',
+      'wp-content/uploads/uag-plugin',
+      'wp-content/uploads/hummingbird-assets',
     ];
   }
 

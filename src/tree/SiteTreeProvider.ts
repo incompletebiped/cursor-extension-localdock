@@ -18,6 +18,8 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private loadingServers = new Set<string>();
+  /** In-memory overlay for transient states (pushing progress). Never written to disk. */
+  private transientStates = new Map<string, WordPressSite>();
 
   constructor(
     private readonly registry: SiteRegistry,
@@ -64,9 +66,9 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
         void this.discoverSites(server.id);
         nodes.push(new LoadingTreeItem());
       } else {
-        // Sort alphabetically by domain
+        // Sort alphabetically by domain, applying any in-memory transient state overlay
         const sorted = [...sites].sort((a, b) => a.domain.localeCompare(b.domain));
-        nodes.push(...sorted.map((s) => new SiteTreeItem(s)));
+        nodes.push(...sorted.map((s) => new SiteTreeItem(this.transientStates.get(s.id) ?? s)));
       }
     }
 
@@ -191,8 +193,19 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
     }
   }
 
+  /** Persist a meaningful state transition (pulling, pulled, pushing, error) and refresh the tree. */
   async updateSiteState(site: WordPressSite): Promise<void> {
+    this.transientStates.delete(site.id); // clear any transient overlay
     await this.registry.updateSite(site);
+    this._onDidChangeTreeData.fire();
+  }
+
+  /**
+   * Update transient display state (progress during push/pull) without writing to disk.
+   * Fire-and-forget safe — no concurrent registry write race.
+   */
+  setTransientState(site: WordPressSite): void {
+    this.transientStates.set(site.id, site);
     this._onDidChangeTreeData.fire();
   }
 }

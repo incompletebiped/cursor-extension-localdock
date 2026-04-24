@@ -128,7 +128,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ),
 
     vscode.commands.registerCommand('localdockCpanel.pushSite', (item: SiteTreeItem) =>
-      pushSite(item, registry, credManager, siteTreeProvider, activityManager, configManager)
+      pushSite(item, registry, credManager, siteTreeProvider, activityManager, configManager, dockerManager)
     ),
 
     vscode.commands.registerCommand('localdockCpanel.diffSite', (item: SiteTreeItem) =>
@@ -193,6 +193,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       dockerManager.launchDockerDesktop();
       vscode.window.showInformationMessage('Launching Docker Desktop…');
       localDockerTreeProvider.refresh();
+    }),
+
+    vscode.commands.registerCommand('localdockCpanel.showOutput', () => {
+      logger.show();
     })
   );
 
