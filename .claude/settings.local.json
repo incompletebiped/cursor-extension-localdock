@@ -45,7 +45,11 @@
       "Bash(echo \"=== C: dir mount ===\")",
       "Bash(powershell.exe -NoProfile -Command \"Get-Volume | Select-Object DriveLetter,FileSystemType,DriveType,SizeRemaining,Size | Format-Table -AutoSize\")",
       "Bash(tail -5)",
-      "Bash(echo \"=== cleanup orphaned containers/volume from failed attempt ===\")"
+      "Bash(echo \"=== cleanup orphaned containers/volume from failed attempt ===\")",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(npx vsce *)",
+      "Bash(node \"C:/Users/baile/AppData/Local/Temp/claude/D--Git-Vault-cursor-extension-localdock/39ba1a0d-0e0d-4f25-a244-c6ecd9a5b5ee/scratchpad/release.mjs\")"
     ]
   }
 }
