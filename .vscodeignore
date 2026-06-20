@@ -1,0 +1,21 @@
+# Source & build tooling — the shipped code is the bundled dist/extension.js
+src/**
+**/*.ts
+**/*.map
+esbuild.js
+tsconfig.json
+
+# Repo / editor / agent config
+.vscode/**
+.github/**
+.claude/**
+.gitignore
+.vscodeignore
+ROADMAP.md
+
+# Lockfiles & local artifacts (vsce already prunes devDependencies from node_modules)
+package-lock.json
+*.vsix
+.env
+*.log
+**/.DS_Store

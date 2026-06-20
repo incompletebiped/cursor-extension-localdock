@@ -1,6 +1,6 @@
 # LocalDock for cPanel
 
-> **Work in Progress** — Core pull/push workflows are functional and being tested. Docker-based local WordPress environments are implemented but not yet end-to-end tested. Not yet published to the Marketplace.
+> **Beta** — The full round trip (pull → run locally in Docker → edit → push to live) has been validated end-to-end against a real cPanel site. Distributed as an installable `.vsix` via [GitHub Releases](https://github.com/incompletebiped/cursor-extension-localdock/releases) — not yet on the Marketplace.
 
 A Cursor / VS Code extension that replicates the [LocalWP](https://localwp.com/) workflow for WordPress sites hosted on cPanel/WHM servers. Log in once, browse all your WordPress installs in the sidebar, pull a full copy locally, spin up a local WordPress environment with Docker, edit in Cursor, and push changes back — all without leaving the editor.
 
@@ -78,6 +78,22 @@ LOCALDOCK CPANEL
     ├── example.com    ▶ Running — http://localhost:8080
     └── mysite.org     ◼ Stopped
 ```
+
+---
+
+## Installation
+
+This extension is distributed as a `.vsix` file (not on the VS Code Marketplace yet).
+
+1. Download the latest `localdock-cpanel-<version>.vsix` from the
+   [**Releases**](https://github.com/incompletebiped/cursor-extension-localdock/releases) page.
+2. In Cursor (or VS Code), open the Extensions panel, click the **`…`** menu in the top-right,
+   and choose **Install from VSIX…** — then select the downloaded file.
+   - Or from a terminal: `cursor --install-extension localdock-cpanel-<version>.vsix`
+     (use `code --install-extension …` for VS Code).
+3. Reload the window when prompted. The **LocalDock cPanel** icon appears in the activity bar.
+
+To update later, download the newer `.vsix` and install it the same way — it replaces the old version.
 
 ---
 
