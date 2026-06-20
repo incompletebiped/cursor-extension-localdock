@@ -32,7 +32,20 @@
       "Bash(cmd *)",
       "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.contributes.menus['view/item/context'], null, 2\\)\\)\")",
       "Bash(node -e \"const p = JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); console.log\\('main:', p.main\\); console.log\\('scripts:', JSON.stringify\\(p.scripts, null, 2\\)\\)\")",
-      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('main:', p.main\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")"
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('main:', p.main\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(docker --version)",
+      "Bash(docker compose *)",
+      "Bash(docker info *)",
+      "Bash(mysql --version)",
+      "Bash(mysqldump --version)",
+      "Bash(mkdir -p \"/c/Users/baile/AppData/Local/Temp/dockertest\")",
+      "Bash(echo \"hello\")",
+      "Bash(export MSYS_NO_PATHCONV=1)",
+      "Bash(echo \"=== C: dir mount ===\")",
+      "Bash(powershell.exe -NoProfile -Command \"Get-Volume | Select-Object DriveLetter,FileSystemType,DriveType,SizeRemaining,Size | Format-Table -AutoSize\")",
+      "Bash(tail -5)",
+      "Bash(echo \"=== cleanup orphaned containers/volume from failed attempt ===\")"
     ]
   }
 }

@@ -1,6 +1,4 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as os from 'os';
 import { SiteTreeItem } from '../tree/SiteTreeItem';
 import { SiteTreeProvider } from '../tree/SiteTreeProvider';
 import { LocalDockerTreeProvider } from '../tree/LocalDockerTreeProvider';
@@ -18,18 +16,8 @@ import { SiteManifest } from '../models/Manifest';
 import { sanitizeDbName } from '../utils/pathUtils';
 import { handleError } from '../utils/errors';
 import { logger } from '../utils/logger';
-
-function resolveLocalPath(domain: string, configManager: ConfigManager): string {
-  const workspaceFolders = vscode.workspace.workspaceFolders;
-  if (workspaceFolders && workspaceFolders.length > 0) {
-    return path.join(workspaceFolders[0].uri.fsPath, domain);
-  }
-  const configured = configManager.localSitesDirectory;
-  if (configured) {
-    return path.join(configured, domain);
-  }
-  return path.join(os.homedir(), 'localdock-sites', domain);
-}
+import { resolveLocalSitePath } from '../utils/locations';
+import { checkDriveEligibility } from '../utils/driveEligibility';
 
 export async function pullSite(
   item: SiteTreeItem,
@@ -53,7 +41,28 @@ export async function pullSite(
     return;
   }
 
-  const localPath = site.localPath ?? resolveLocalPath(site.domain, configManager);
+  // Resolve where to pull. A previously-stored localPath on an unusable drive
+  // (e.g. the site was first pulled onto a removable/exFAT drive) must not be
+  // reused — fall back to the configured base directory instead.
+  let localPath = site.localPath ?? resolveLocalSitePath(site.domain);
+  if (!(await checkDriveEligibility(localPath)).eligible) {
+    localPath = resolveLocalSitePath(site.domain);
+  }
+
+  // Preflight: refuse to download onto a drive Docker can't bind-mount, instead
+  // of wasting a multi-minute transfer that "Start Local" would later reject.
+  const eligibility = await checkDriveEligibility(localPath);
+  if (!eligibility.eligible) {
+    const choice = await vscode.window.showErrorMessage(
+      `Can't pull ${site.domain} to ${localPath}. ${eligibility.reason ?? ''}`,
+      'Choose Folder…'
+    );
+    if (choice === 'Choose Folder…') {
+      await vscode.commands.executeCommand('localdockCpanel.setSitesDirectory');
+    }
+    return;
+  }
+
   const { id: opId, token } = activityManager.start(site.domain, site.serverId, 'pull');
 
   const updatedSite: WordPressSite = {

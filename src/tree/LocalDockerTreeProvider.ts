@@ -3,6 +3,8 @@ import { DockerManager } from '../docker/DockerManager';
 import { SiteRegistry } from '../SiteRegistry';
 import { LocalEnvStatus } from '../models/LocalEnvState';
 import { WordPressSite } from '../models/Site';
+import { resolveSitesBaseDir } from '../utils/locations';
+import { checkDriveEligibility, DriveEligibility } from '../utils/driveEligibility';
 
 // ---------------------------------------------------------------------------
 // Tree item types
@@ -50,6 +52,25 @@ export class LocalEnvItem extends vscode.TreeItem {
   }
 }
 
+class SitesDirectoryItem extends vscode.TreeItem {
+  constructor(dir: string, eligibility: DriveEligibility) {
+    super('Local Sites Folder', vscode.TreeItemCollapsibleState.None);
+    this.command = { command: 'localdockCpanel.setSitesDirectory', title: 'Set Local Sites Folder' };
+
+    if (eligibility.eligible) {
+      this.contextValue = 'sitesDirOk';
+      this.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor('charts.green'));
+      this.description = dir;
+      this.tooltip = `Pulled sites are stored here:\n${dir}\n\nClick to change.`;
+    } else {
+      this.contextValue = 'sitesDirIneligible';
+      this.iconPath = new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground'));
+      this.description = 'Ineligible drive — click to change';
+      this.tooltip = `${dir}\n\n${eligibility.reason ?? "This drive can't be used for local sites."}\n\nClick to choose a different folder.`;
+    }
+  }
+}
+
 class ServiceLinkItem extends vscode.TreeItem {
   constructor(label: string, icon: string, url: string, hint?: string) {
     super(label, vscode.TreeItemCollapsibleState.None);
@@ -93,6 +114,7 @@ class EmptyLocalItem extends vscode.TreeItem {
 
 type LocalDockerNode =
   | DockerStatusItem
+  | SitesDirectoryItem
   | LocalEnvItem
   | ServiceLinkItem
   | SetupStepItem
@@ -136,11 +158,14 @@ export class LocalDockerTreeProvider implements vscode.TreeDataProvider<LocalDoc
     const nodes: LocalDockerNode[] = [];
 
     // Docker status — check version and daemon in parallel
-    const [version, daemonRunning] = await Promise.all([
+    const sitesDir = resolveSitesBaseDir();
+    const [version, daemonRunning, eligibility] = await Promise.all([
       this.dockerManager.getDockerVersion(),
       this.dockerManager.isDaemonRunning(),
+      checkDriveEligibility(sitesDir),
     ]);
     nodes.push(new DockerStatusItem(version, daemonRunning));
+    nodes.push(new SitesDirectoryItem(sitesDir, eligibility));
 
     // Pulled sites with local env
     const allSites = this.registry.getAllSites();

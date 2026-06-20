@@ -11,6 +11,7 @@ import { SiteRegistry } from '../SiteRegistry';
 import { readManifest, writeManifest } from '../sync/Manifest';
 import { handleError, LocalDockError, LocalDockErrorCode } from '../utils/errors';
 import { logger } from '../utils/logger';
+import { checkDriveEligibility } from '../utils/driveEligibility';
 
 export async function startLocal(
   item: SiteTreeItem | LocalEnvItem,
@@ -30,6 +31,23 @@ export async function startLocal(
   const pullStatus = site.syncState.status;
   if (pullStatus === 'not_pulled' || pullStatus === 'pulling' || pullStatus === 'pushing') {
     vscode.window.showWarningMessage(`Cannot start local environment while the site is ${pullStatus}.`);
+    return;
+  }
+
+  // Preflight: Docker can only bind-mount fixed NTFS/ReFS drives. Catch an
+  // unusable location up front with actionable guidance rather than letting
+  // `docker compose up` fail with a cryptic "read-only file system" error.
+  const eligibility = await checkDriveEligibility(site.localPath);
+  if (!eligibility.eligible) {
+    handleError(
+      'startLocal',
+      new LocalDockError(
+        `${site.domain} is stored at ${site.localPath}, which Docker can't use. ${eligibility.reason ?? ''} ` +
+          `Set a new Local Sites Folder and re-pull the site.`,
+        LocalDockErrorCode.DRIVE_INELIGIBLE,
+        false
+      )
+    );
     return;
   }
 

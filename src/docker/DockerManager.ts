@@ -133,8 +133,20 @@ export class DockerManager {
     logger.info(`[DockerManager] Starting local environment at ${localPath}`);
     const result = await this.spawnCompose(['up', '-d', '--wait'], localPath);
     if (result.code !== 0) {
+      const stderr = result.stderr || '';
+      // Docker Desktop on Windows only bind-mounts fixed NTFS drives read-write.
+      // Removable / exFAT / network drives mount read-only, so the mount source
+      // path can't be created and the daemon returns "read-only file system".
+      if (/read-only file system/i.test(stderr) && /mount source path/i.test(stderr)) {
+        throw new LocalDockError(
+          `Docker can't bind-mount the site folder at "${localPath}". This drive is most likely removable, exFAT, or a network share — Docker Desktop only mounts fixed NTFS drives (e.g. C:) read-write. ` +
+            `Set "LocalDock cPanel: Local Sites Directory" to a folder on C: and re-pull the site.`,
+          LocalDockErrorCode.DOCKER_START_FAILED,
+          false
+        );
+      }
       throw new LocalDockError(
-        `docker compose up failed: ${result.stderr}`,
+        `docker compose up failed: ${stderr}`,
         LocalDockErrorCode.DOCKER_START_FAILED,
         true
       );

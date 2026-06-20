@@ -124,6 +124,12 @@
         "title": "Install Docker Desktop",
         "icon": "$(link-external)",
         "category": "LocalDock cPanel"
+      },
+      {
+        "command": "localdockCpanel.setSitesDirectory",
+        "title": "Set Local Sites Folder",
+        "icon": "$(folder)",
+        "category": "LocalDock cPanel"
       }
     ],
     "viewsContainers": {
@@ -165,6 +171,11 @@
         {
           "command": "localdockCpanel.refreshSites",
           "when": "view == localdockCpanel.siteTree",
+          "group": "navigation"
+        },
+        {
+          "command": "localdockCpanel.setSitesDirectory",
+          "when": "view == localdockCpanel.localDockerTree",
           "group": "navigation"
         }
       ],

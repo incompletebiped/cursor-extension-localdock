@@ -28,6 +28,7 @@ import { startLocal } from './commands/startLocal';
 import { stopLocal } from './commands/stopLocal';
 import { openLocalSite } from './commands/openLocalSite';
 import { resetLocalConfig } from './commands/resetLocalConfig';
+import { setSitesDirectory } from './commands/setSitesDirectory';
 
 let _registry: SiteRegistry | undefined;
 let _dockerManager: DockerManager | undefined;
@@ -187,6 +188,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     vscode.commands.registerCommand('localdockCpanel.openDockerSetup', () => {
       vscode.env.openExternal(vscode.Uri.parse('https://www.docker.com/products/docker-desktop'));
+    }),
+
+    vscode.commands.registerCommand('localdockCpanel.setSitesDirectory', async () => {
+      const changed = await setSitesDirectory();
+      if (changed) {
+        siteTreeProvider.refresh();
+        localDockerTreeProvider.refresh();
+      }
     }),
 
     vscode.commands.registerCommand('localdockCpanel.launchDockerDesktop', () => {
