@@ -337,8 +337,8 @@
         },
         "localdockCpanel.rejectUnauthorizedSsl": {
           "type": "boolean",
-          "default": false,
-          "description": "Reject self-signed SSL certificates on cPanel API calls. Disable for servers with self-signed certs."
+          "default": true,
+          "description": "Verify SSL certificates on cPanel API calls (recommended). Disable only for servers with self-signed or locally-trusted certificates."
         },
         "localdockCpanel.sshPort": {
           "type": "number",

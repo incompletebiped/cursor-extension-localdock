@@ -92,6 +92,7 @@ export async function pullSite(
     }
 
     const localMysqlPassword = await credManager.getLocalMysqlPassword();
+    const siteDbPass = await credManager.getDbPassword(site.id);
     const dbSyncer = new DatabaseSyncer(ssh, sftp, {
       host: configManager.localMysqlHost,
       port: configManager.localMysqlPort,
@@ -143,7 +144,7 @@ export async function pullSite(
     }
 
     report(90, 'Syncing database…');
-    await dbSyncer.pullDatabase(site, localPath, (msg) => report(92, msg));
+    await dbSyncer.pullDatabase({ ...site, dbPass: siteDbPass }, localPath, (msg) => report(92, msg));
 
     report(98, 'Writing manifest…');
     const manifest: SiteManifest = {

@@ -25,7 +25,7 @@ export class ConfigManager {
   }
 
   get rejectUnauthorizedSsl(): boolean {
-    return this.config.get<boolean>('rejectUnauthorizedSsl', false);
+    return this.config.get<boolean>('rejectUnauthorizedSsl', true);
   }
 
   get sshPort(): number {

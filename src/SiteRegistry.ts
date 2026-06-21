@@ -1,12 +1,16 @@
 import * as vscode from 'vscode';
 import { CpanelServer } from './models/Server';
 import { WordPressSite } from './models/Site';
+import { CredentialManager } from './auth/CredentialManager';
 
 const SERVERS_KEY = 'localdock.servers';
 const SITES_KEY_PREFIX = 'localdock.sites.';
 
 export class SiteRegistry {
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly credManager: CredentialManager
+  ) {}
 
   // --- Servers ---
 
@@ -21,6 +25,8 @@ export class SiteRegistry {
   }
 
   async removeServer(serverId: string): Promise<void> {
+    const sites = this.getSites(serverId);
+    await Promise.all(sites.map(s => this.credManager.deleteDbPassword(s.id)));
     const servers = this.getServers().filter((s) => s.id !== serverId);
     await this.context.globalState.update(SERVERS_KEY, servers);
     await this.context.globalState.update(SITES_KEY_PREFIX + serverId, undefined);
@@ -43,7 +49,13 @@ export class SiteRegistry {
   }
 
   async setSites(serverId: string, sites: WordPressSite[]): Promise<void> {
-    await this.context.globalState.update(SITES_KEY_PREFIX + serverId, sites);
+    await Promise.all(
+      sites.filter(s => s.dbPass).map(s => this.credManager.storeDbPassword(s.id, s.dbPass))
+    );
+    await this.context.globalState.update(
+      SITES_KEY_PREFIX + serverId,
+      sites.map(s => ({ ...s, dbPass: '' }))
+    );
   }
 
   async updateSite(site: WordPressSite): Promise<void> {

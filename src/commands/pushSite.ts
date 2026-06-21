@@ -141,6 +141,7 @@ export async function pushSite(
     }
 
     const localMysqlPassword = await credManager.getLocalMysqlPassword();
+    const siteDbPass = await credManager.getDbPassword(site.id);
     const dbSyncer = new DatabaseSyncer(ssh, sftp, {
       host: configManager.localMysqlHost,
       port: configManager.localMysqlPort,
@@ -211,12 +212,12 @@ export async function pushSite(
         logger.info(`[pushSite] DB dump: ${sql.length} bytes`);
 
         report(84, 'Pushing database…');
-        await dbSyncer.pushDatabase(site, site.localPath!, (msg) => report(85, msg), dockerDumpPath);
+        await dbSyncer.pushDatabase({ ...site, dbPass: siteDbPass }, site.localPath!, (msg) => report(85, msg), dockerDumpPath);
 
         const localUrl = manifest.localPort ? `http://localhost:${manifest.localPort}` : undefined;
         const productionUrl = `https://${site.domain}`;
         if (localUrl && localUrl !== productionUrl) {
-          await dbSyncer.fixUrlsOnServer(site, localUrl, productionUrl, (msg) => report(87, msg));
+          await dbSyncer.fixUrlsOnServer({ ...site, dbPass: siteDbPass }, localUrl, productionUrl, (msg) => report(87, msg));
         }
         dbPushed = true;
       } else {

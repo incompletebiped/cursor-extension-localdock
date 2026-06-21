@@ -157,12 +157,19 @@ export class CpanelClient {
   /**
    * Detect WordPress using SSH+SFTP (faster, used when SSH is available).
    */
+  private validateDocroot(docroot: string): void {
+    if (!/^\/[a-zA-Z0-9_.\-/]+$/.test(docroot)) {
+      throw new Error(`Unsafe docroot path rejected: ${docroot}`);
+    }
+  }
+
   async detectWordPress(
     sftpClient: SftpClient,
     sshClient: SshClient,
     domain: DomainEntry
   ): Promise<WordPressFingerprint | null> {
     const { docroot } = domain;
+    this.validateDocroot(docroot);
 
     // Strategy 1: SFTP stat
     try {

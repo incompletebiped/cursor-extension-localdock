@@ -40,7 +40,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const configManager = new ConfigManager();
   const credManager = new CredentialManager(context);
   const authProvider = new AuthProvider();
-  const registry = new SiteRegistry(context);
+  const registry = new SiteRegistry(context, credManager);
   const activityManager = new ActivityManager();
   const dockerManager = new DockerManager(configManager);
 

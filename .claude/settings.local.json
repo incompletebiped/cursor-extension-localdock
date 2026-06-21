@@ -49,7 +49,9 @@
       "Bash(gh --version)",
       "Bash(gh auth *)",
       "Bash(npx vsce *)",
-      "Bash(node \"C:/Users/baile/AppData/Local/Temp/claude/D--Git-Vault-cursor-extension-localdock/39ba1a0d-0e0d-4f25-a244-c6ecd9a5b5ee/scratchpad/release.mjs\")"
+      "Bash(node \"C:/Users/baile/AppData/Local/Temp/claude/D--Git-Vault-cursor-extension-localdock/39ba1a0d-0e0d-4f25-a244-c6ecd9a5b5ee/scratchpad/release.mjs\")",
+      "Bash(Get-Content \"D:\\\\Git_Vault\\\\cursor-extension-localdock\\\\package.json\")",
+      "Bash(Select-String -Pattern \"rejectUnauthorized|Unauthorized\" -Context 3)"
     ]
   }
 }
