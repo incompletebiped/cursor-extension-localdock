@@ -1,62 +1,71 @@
 # LocalDock for cPanel
 
-> **Beta** — The full round trip (pull → run locally in Docker → edit → push to live) has been validated end-to-end against a real cPanel site. Distributed as an installable `.vsix` via [GitHub Releases](https://github.com/incompletebiped/cursor-extension-localdock/releases) — not yet on the Marketplace.
+A Cursor / VS Code extension that replicates the [LocalWP](https://localwp.com/) workflow for WordPress sites hosted on cPanel/WHM. Log in once, browse all your WordPress installs in the sidebar, pull a full copy locally, spin up a local WordPress environment in Docker, edit in Cursor, and push changes back — without leaving the editor.
 
-A Cursor / VS Code extension that replicates the [LocalWP](https://localwp.com/) workflow for WordPress sites hosted on cPanel/WHM servers. Log in once, browse all your WordPress installs in the sidebar, pull a full copy locally, spin up a local WordPress environment with Docker, edit in Cursor, and push changes back — all without leaving the editor.
+> Distributed as an installable `.vsix` via [GitHub Releases](https://github.com/incompletebiped/cursor-extension-localdock/releases).
 
 ---
 
-## What Works Today
+## Requirements
 
-### Server Management
-- Add a cPanel server (host, username, password or SSH key)
-- Edit an existing server's connection details or credentials
-- Remove a server
-- Test connection — verifies cPanel HTTPS API access and optionally SSH
+**Local machine**
+- VS Code 1.85+ or any recent Cursor build
+- Docker Desktop (required for local WordPress environments; not needed for pull/push only)
+- MySQL running locally (default: `127.0.0.1:3306`, user `root`) — needed for DB import/export
 
-### WordPress Site Discovery
-- Automatically lists all WordPress installs on a server when you connect
-- Detection uses cPanel HTTPS API (Fileman) to read `wp-config.php` — SSH is not required for discovery
-- Falls back to SSH-based detection if the API path fails
-- Sites listed alphabetically
+**cPanel server**
+- cPanel/WHM with UAPI (port 2083) accessible
+- SSH enabled for your cPanel user
+- `mysqldump` available (standard on all cPanel hosts)
 
-### Pull (Download)
-- Right-click any site → **Pull Site** to download all WordPress files via SFTP
-- Exports the remote database via `mysqldump` over SSH, downloads it, and imports it into your local MySQL instance
-- Handles `DB_HOST` values like `localhost:3306` in wp-config.php correctly (splits host and port)
-- Excludes large/unnecessary directories by default (`wp-content/uploads`, `wp-content/cache`, `node_modules`, etc.)
-- Writes a `.localdock/manifest.json` with file checksums for diff-based push later
-- Cancellable mid-transfer via the Activity panel
-- After pull completes, prompts to start a local Docker environment immediately
+---
 
-### Push (Upload)
-- Right-click a pulled site → **Push Site**
-- Computes a diff against the manifest (added / modified / deleted files)
-- Shows a QuickPick confirmation list of every file that will change before doing anything
-- Uploads only changed files concurrently via SFTP
-- Exports local DB and imports it on the remote server
-- Updates the manifest with new checksums
+## Installation
 
-### Diff (Show Changes)
-- Right-click → **Show Changed Files** to preview local changes without pushing
+1. Download the latest `localdock-cpanel-<version>.vsix` from [**Releases**](https://github.com/incompletebiped/cursor-extension-localdock/releases)
+2. In Cursor/VS Code: Extensions panel → **`…`** menu → **Install from VSIX…**
+   - Or from a terminal: `cursor --install-extension localdock-cpanel-<version>.vsix`
+3. Reload when prompted — the **LocalDock cPanel** icon appears in the activity bar
 
-### Open Site Folder
-- Right-click → **Open Site Folder** to reveal the local site directory in the OS file explorer
+---
 
-### Local Docker Environments *(implemented, testing in progress)*
-- Right-click a pulled site → **Start Local WordPress** to spin up a WordPress + MySQL stack via Docker Compose
-- Automatically scaffolds a `docker-compose.yml` in `.localdock/` — customizable, never overwritten once created
-- Rewrites WordPress `siteurl`/`home` options in the SQL dump from production URL to `http://localhost:{port}` before first start
-- Patches `wp-config.php` to use Docker MySQL credentials (backup saved to `.localdock/wp-config.docker.bak`)
-- Assigns a unique port per site starting from 8080 (configurable), checked against both OS availability and other sites' manifests
-- **Stop Local** button tears down containers; **Open in Browser** opens the site in Cursor's built-in Simple Browser panel
-- Graceful error when Docker Desktop is not installed — shows link to download page
+## Features
+
+### Server & Site Management
+- Add, edit, remove, and test cPanel servers
+- WordPress sites discovered automatically on connect — uses cPanel Fileman API, SSH is not required for discovery
+- Sites listed alphabetically with sync status and local environment state
+
+### Pull (Download from server)
+- Full WordPress files downloaded via concurrent SFTP
+- `mysqldump` export over SSH, imported into your local MySQL
+- MD5 manifest written for accurate diff-based push later
+- Configurable exclude patterns (uploads excluded by default — large)
+- Cancellable at any point via the Activity panel
+
+### Push (Upload to server)
+- Diff-only upload — only added, modified, and deleted files transfer
+- Shows a file-by-file confirmation list before any changes are made
+- Exports local MySQL DB, imports on remote, rewrites localhost URLs to production (PHP serialize-safe — preserves Astra/Elementor byte counts)
+- Remote directories created automatically before upload
+
+### Local Docker Environment
+- WordPress + MySQL 8 stack via Docker Compose, one environment per site
+- Unique port assigned per site (default starts at 8080)
+- `.htaccess` HTTPS-redirect rules stripped automatically so local HTTP works
+- `wp-config.php` patched for Docker DB credentials; backup saved to `.localdock/`
+- **Mailpit** email capture at `http://localhost:PORT+1` — all `wp_mail()` caught locally
+- **Adminer** database browser at `http://localhost:PORT+2`
+- **Open in Browser** opens the site in Cursor's Simple Browser panel
+
+### Diff & Inspect
+- **Show Changed Files** — preview local changes against the last pull manifest
+- **Check Remote for Changes** — see what changed on the server since you pulled
 
 ### Activity Panel
-- Live progress display for any running pull, push, or local environment operation
-- History of completed, failed, and cancelled operations with duration
-- Cancel button on any running operation
-- Stale states cleared automatically on extension restart
+- Live progress for all running operations
+- Cancel button on any running pull, push, or Docker operation
+- History of completed, failed, and cancelled operations
 
 ---
 
@@ -81,107 +90,54 @@ LOCALDOCK CPANEL
 
 ---
 
-## Installation
-
-This extension is distributed as a `.vsix` file (not on the VS Code Marketplace yet).
-
-1. Download the latest `localdock-cpanel-<version>.vsix` from the
-   [**Releases**](https://github.com/incompletebiped/cursor-extension-localdock/releases) page.
-2. In Cursor (or VS Code), open the Extensions panel, click the **`…`** menu in the top-right,
-   and choose **Install from VSIX…** — then select the downloaded file.
-   - Or from a terminal: `cursor --install-extension localdock-cpanel-<version>.vsix`
-     (use `code --install-extension …` for VS Code).
-3. Reload the window when prompted. The **LocalDock cPanel** icon appears in the activity bar.
-
-To update later, download the newer `.vsix` and install it the same way — it replaces the old version.
-
----
-
-## Setup Requirements
-
-### VS Code / Cursor
-- VS Code 1.85+ or any recent Cursor build
-
-### On your local machine
-- **MySQL** running locally (default: `127.0.0.1:3306`, user `root`) — required for DB import during pull/push
-- **Docker Desktop** — required for local WordPress environments (optional if you only need pull/push)
-- **SSH access** to your cPanel server is required for Pull and Push
-- SSH is not needed for site discovery — that uses cPanel HTTPS port 2083
-
-### On your cPanel server
-- cPanel/WHM with UAPI access enabled
-- `mysqldump` available (standard on most cPanel hosts)
-- SSH enabled for your cPanel user
-
----
-
 ## Configuration
 
-All settings are under `LocalDock for cPanel` in VS Code settings:
+All settings live under `localdockCpanel.*`:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `localdockCpanel.localSitesDirectory` | `~/localdock-sites` | Where pulled sites are stored |
-| `localdockCpanel.localMysqlHost` | `127.0.0.1` | Local MySQL host |
-| `localdockCpanel.localMysqlPort` | `3306` | Local MySQL port |
-| `localdockCpanel.localMysqlUser` | `root` | Local MySQL username |
-| `localdockCpanel.sshPort` | `22` | Default SSH port for servers |
-| `localdockCpanel.excludePatterns` | see below | Glob patterns excluded from sync |
-| `localdockCpanel.databaseSyncMethod` | `mysqldump` | `mysqldump` or `wpcli` |
-| `localdockCpanel.maxConcurrentTransfers` | `5` | Parallel SFTP file transfers |
-| `localdockCpanel.rejectUnauthorizedSsl` | `false` | Reject self-signed SSL certs |
-| `localdockCpanel.dockerStartPort` | `8080` | Starting port for local Docker environments |
-
-Default exclude patterns:
-```
-wp-content/uploads/**
-wp-content/cache/**
-wp-content/backup-db/**
-*.log
-.DS_Store
-node_modules/**
-```
-
-> **Tip:** Keep `wp-content/uploads/**` excluded unless you specifically need media files locally — syncing a large uploads folder will make pull/push very slow.
+| `localSitesDirectory` | `~/localdock-sites` | Where pulled sites are stored |
+| `localMysqlHost` | `127.0.0.1` | Local MySQL host |
+| `localMysqlPort` | `3306` | Local MySQL port |
+| `localMysqlUser` | `root` | Local MySQL username |
+| `sshPort` | `22` | Default SSH port |
+| `rejectUnauthorizedSsl` | `true` | Verify SSL certificates on cPanel API calls. Disable only for servers with self-signed certificates. |
+| `pullUploads` | `false` | Download `wp-content/uploads` on pull |
+| `uploadsSyncPaths` | UAG, Elementor, Hummingbird, Astra… | Upload subdirs always synced even when `pullUploads` is false |
+| `excludePatterns` | cache, logs, node_modules… | Paths excluded from pull |
+| `databaseSyncMethod` | `mysqldump` | `mysqldump` (default) |
+| `maxConcurrentTransfers` | `5` | Parallel SFTP file transfers |
+| `dockerStartPort` | `8080` | First port checked when assigning a local environment |
 
 ---
 
-## How Local Docker Environments Work
+## Security
 
-When you click **Start Local WordPress** on a pulled site, the extension:
-
-1. Checks Docker Desktop is installed and running
-2. Assigns a unique local port (default starts at 8080)
-3. Scaffolds `.localdock/docker-compose.yml` if it doesn't exist (safe to customize — never overwritten)
-4. Rewrites the downloaded `db.sql` so WordPress URLs point to `http://localhost:{port}` instead of the live domain
-5. Patches `wp-config.php` to use the Docker MySQL credentials
-6. Runs `docker compose up -d` — MySQL seeded from `db.sql` on first start
-7. Polls until containers are healthy, then opens the site in Cursor's browser panel
-
-To stop: right-click → **Stop Local WordPress** (runs `docker compose down`).
-
-The `docker-compose.yml` lives in `.localdock/` (not the site root) so it doesn't interfere with your WordPress source files.
+- cPanel passwords and SSH keys are stored in VS Code `SecretStorage` (OS keychain — Keychain on macOS, Credential Manager on Windows, libsecret on Linux). Never written to disk.
+- WordPress database passwords are also stored in `SecretStorage` — stripped from the site registry before it is persisted to disk.
+- `mysqldump` / `mysql` commands pass credentials via the `MYSQL_PWD` environment variable, not as CLI flags, so they do not appear in shell history or process listings.
+- TLS certificate validation is **on by default** for all cPanel HTTPS API connections.
+- Remote temp files (SQL dumps, PHP scripts) are always deleted in `finally` blocks.
 
 ---
 
-## Security Notes
+## Known Limitations
 
-- Passwords and SSH keys are stored in VS Code's `SecretStorage` (OS keychain — Keychain on Mac, Credential Manager on Windows, libsecret on Linux). Never written to disk in plaintext.
-- Database passwords in SSH commands use the `MYSQL_PWD` environment variable so they are not recorded in shell history.
-- Remote temp files (SQL dumps) are always deleted in `finally` blocks.
-- Local Docker MySQL credentials are intentionally simple (`wordpress`/`wordpress`) — this is a local dev environment only, never exposed externally.
+| Area | Status |
+|---|---|
+| WP-CLI sync method | The `wpcli` setting option is not yet implemented. Only `mysqldump` works. |
+| Conflict detection | If a file is edited on the server after you pulled, push overwrites it without warning. |
+| Push without prior pull | A site must be pulled before it can be pushed. |
+| Windows PATH (MySQL) | If `mysql`/`mysqldump` are not on your system PATH (common with XAMPP/WAMP), DB sync will fail. Add your MySQL `bin` directory to PATH. |
+| Marketplace | Not yet published to the VS Code Marketplace. Install via `.vsix` from Releases. |
 
 ---
 
-## Known Issues / Incomplete Features
+## Roadmap
 
-- **Docker local env — end-to-end testing in progress** — implemented but not fully validated across different site configurations
-- **WP-CLI database sync method** — the `wpcli` option in settings is not yet implemented. Only `mysqldump` works.
-- **Conflict detection** — if someone edits a file on the remote server after you pulled, the push currently overwrites without warning. Planned.
-- **Media sync** — `wp-content/uploads` is excluded by default. No dedicated media sync command yet.
-- **Windows local MySQL path** — if `mysql`/`mysqldump` are not on your PATH (common with XAMPP/WAMP), the DB import step will fail silently. Add your MySQL `bin` directory to PATH.
-- **Push without a prior pull** — there is no mechanism to push to a site that was never pulled locally.
-- **Extension packaging** — not yet published to the VS Code Marketplace. Install by running `npm run build` and pressing F5 to launch a development host.
+See [ROADMAP.md](ROADMAP.md) for the full feature timeline.
+
+**Up next (v0.2):** WP-CLI terminal, PHP version switching, Xdebug support.
 
 ---
 
@@ -197,60 +153,32 @@ src/
 │   ├── SshClient.ts          # SSH command execution (ssh2)
 │   └── SftpClient.ts         # SFTP file transfer with parallel directory walking
 ├── auth/
-│   ├── CredentialManager.ts  # SecretStorage CRUD for passwords and SSH keys
+│   ├── CredentialManager.ts  # SecretStorage CRUD for server creds + DB passwords
 │   └── AuthProvider.ts       # Connection test logic
 ├── commands/
-│   ├── addServer.ts
-│   ├── editServer.ts
-│   ├── removeServer.ts
-│   ├── testConnection.ts
-│   ├── refreshSites.ts
-│   ├── pullSite.ts           # Full pull orchestration + post-pull Docker prompt
+│   ├── pullSite.ts           # Full pull orchestration
 │   ├── pushSite.ts           # Diff-based push orchestration
-│   ├── diffSite.ts
-│   ├── openSiteFolder.ts
 │   ├── startLocal.ts         # Docker: port assign, scaffold, URL rewrite, compose up
 │   ├── stopLocal.ts          # Docker: compose down
-│   ├── openLocalSite.ts      # Opens localhost URL in Cursor Simple Browser
-│   └── serverHelpers.ts
+│   └── ...                   # addServer, editServer, removeServer, diffSite, etc.
 ├── docker/
-│   └── DockerManager.ts      # Docker CLI wrapper: scaffold, start, stop, status, ports
+│   └── DockerManager.ts      # Docker CLI wrapper: scaffold, start, stop, status
 ├── sync/
-│   ├── FileSyncer.ts         # Concurrent SFTP download/upload with semaphore
-│   ├── DatabaseSyncer.ts     # mysqldump export/import + URL rewrite for Docker
+│   ├── FileSyncer.ts         # Concurrent SFTP download/upload
+│   ├── DatabaseSyncer.ts     # mysqldump export/import + URL rewrite
 │   ├── DiffEngine.ts         # Checksum-based local change detection
 │   └── Manifest.ts           # .localdock/manifest.json read/write
-├── tree/
-│   ├── ServerTreeProvider.ts
-│   ├── SiteTreeProvider.ts
-│   ├── SiteTreeItem.ts       # Icons/descriptions including local env status
-│   ├── ActivityTreeProvider.ts
-│   └── LocalDockerTreeProvider.ts  # 4th panel: Docker status + per-site env state
-├── models/
-│   ├── Server.ts
-│   ├── Site.ts               # WordPressSite (includes localEnv state)
-│   ├── SyncState.ts
-│   ├── LocalEnvState.ts      # LocalEnvStatus + LocalEnvState interface
-│   ├── Manifest.ts           # SiteManifest (includes localPort, dbUrlRewritten)
-│   └── Credentials.ts
-└── utils/
-    ├── logger.ts
-    ├── configManager.ts      # Typed getters for all settings incl. dockerStartPort
-    ├── errors.ts             # LocalDockError + DOCKER_NOT_FOUND/START/STOP codes
-    ├── pathUtils.ts
-    └── progressUtils.ts
+├── tree/                     # Four sidebar panel providers
+├── models/                   # TypeScript interfaces (Server, Site, SyncState, etc.)
+└── utils/                    # logger, configManager, errors, pathUtils
 ```
-
----
 
 ## Development
 
 ```bash
 npm install
-npm run build       # one-shot build via esbuild
-npm run watch       # rebuild on save
+npm run build    # one-shot esbuild
+npm run watch    # rebuild on save
 ```
 
-Press **F5** in Cursor/VS Code to launch the Extension Development Host.
-
-Bundled with [esbuild](https://esbuild.github.io/). `ssh2` and `ssh2-sftp-client` are marked as external (native bindings) and must be present in `node_modules` at runtime.
+Press **F5** to launch the Extension Development Host.

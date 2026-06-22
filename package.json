@@ -2,7 +2,7 @@
   "name": "localdock-cpanel",
   "displayName": "LocalDock for cPanel",
   "description": "Pull, edit, and push WordPress sites hosted on cPanel/WHM — like LocalWP but for live servers.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "incompletebiped",
   "repository": {
     "type": "git",
