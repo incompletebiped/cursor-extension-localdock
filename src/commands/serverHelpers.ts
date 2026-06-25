@@ -12,6 +12,20 @@ export function normalizeHostname(input: string): string {
   return h.trim();
 }
 
+/** Return true if an error message indicates an SSL/TLS certificate failure. */
+export function isCertError(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes('certificate') ||
+    lower.includes('self signed') ||
+    lower.includes('self-signed') ||
+    lower.includes('unable to verify') ||
+    lower.includes('err_tls') ||
+    lower.includes('depth_zero') ||
+    lower.includes('eproto')
+  );
+}
+
 /** Return true if string looks like a PEM private key */
 export function looksLikePrivateKey(content: string): boolean {
   return (

@@ -5,7 +5,7 @@ import { ServerTreeProvider, ServerTreeItem } from '../tree/ServerTreeProvider';
 import { SiteTreeProvider } from '../tree/SiteTreeProvider';
 import { CpanelClient } from '../api/CpanelClient';
 import { handleError } from '../utils/errors';
-import { normalizeHostname, promptCredentials } from './serverHelpers';
+import { normalizeHostname, promptCredentials, isCertError } from './serverHelpers';
 
 export async function editServer(
   item: ServerTreeItem,
@@ -45,7 +45,7 @@ export async function editServer(
       value: String(existing.sshPort),
       ignoreFocusOut: true,
       validateInput: (v) =>
-        Number.isInteger(Number(v)) && Number(v) > 0 ? undefined : 'Enter a valid port number',
+        Number.isInteger(Number(v)) && Number(v) > 0 && Number(v) <= 65535 ? undefined : 'Enter a valid port number (1–65535)',
     });
     if (sshPortStr === undefined) { return; }
 
@@ -107,29 +107,68 @@ export async function editServer(
       label: label.trim(),
     };
 
-    // Test cPanel HTTPS API with updated settings
+    // Test cPanel HTTPS API with updated settings. Use the server's stored SSL preference;
+    // if that fails with a cert error, offer the user an explicit override.
     let ok = false;
+    let acceptInsecureSsl = false;
+    const currentStrictSsl = updated.rejectUnauthorizedSsl ?? true;
+
+    const tryCpanelApi = async (strictSsl: boolean) => {
+      const cpanel = new CpanelClient(updated, { ...creds, serverId: updated.id }, strictSsl);
+      const result = await cpanel.testApiConnection();
+      if (!result.success) {
+        throw new Error(result.error ?? 'Connection failed');
+      }
+    };
+
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: `Testing connection to ${updated.host}…` },
-      async () => {
-        const cpanel = new CpanelClient(updated, { ...creds, serverId: updated.id }, false);
-        const result = await cpanel.testApiConnection();
-        if (result.success) {
-          ok = true;
-        } else {
-          throw new Error(result.error ?? 'Connection failed');
+      () => tryCpanelApi(currentStrictSsl)
+    ).then(
+      () => { ok = true; },
+      async (err: Error) => {
+        if (isCertError(err.message) && currentStrictSsl) {
+          const choice = await vscode.window.showWarningMessage(
+            `SSL certificate error connecting to ${updated.host}.\n\n` +
+            `The certificate could not be verified. Connect without SSL verification?`,
+            { modal: true },
+            'Connect Without SSL Verification',
+            'Save Anyway'
+          );
+          if (choice === 'Connect Without SSL Verification') {
+            await vscode.window.withProgress(
+              { location: vscode.ProgressLocation.Notification, title: `Retrying without SSL verification…` },
+              () => tryCpanelApi(false)
+            ).then(
+              () => { acceptInsecureSsl = true; ok = true; },
+              async (retryErr: Error) => {
+                const s = await vscode.window.showWarningMessage(
+                  `Still failed: ${retryErr.message}\n\nSave changes anyway?`,
+                  { modal: true },
+                  'Save Anyway'
+                );
+                if (s === 'Save Anyway') { acceptInsecureSsl = true; ok = true; }
+              }
+            );
+          } else if (choice === 'Save Anyway') {
+            ok = true;
+          }
+          return;
         }
+        const choice = await vscode.window.showWarningMessage(
+          `Connection test failed: ${err.message}\n\nSave changes anyway?`,
+          { modal: true },
+          'Save Anyway'
+        );
+        if (choice === 'Save Anyway') { ok = true; }
       }
-    ).then(undefined, async (err: Error) => {
-      const choice = await vscode.window.showWarningMessage(
-        `Connection test failed: ${err.message}\n\nSave changes anyway?`,
-        { modal: true },
-        'Save Anyway'
-      );
-      if (choice === 'Save Anyway') { ok = true; }
-    });
+    );
 
     if (!ok) { return; }
+
+    if (acceptInsecureSsl) {
+      updated.rejectUnauthorizedSsl = false;
+    }
 
     // Save updated credentials if changed
     if (changeCredsChoice.id === 'change') {

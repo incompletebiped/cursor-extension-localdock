@@ -45,6 +45,13 @@ export class DatabaseSyncer {
         false
       );
     }
+    if (!isValidDbIdentifier(site.dbUser)) {
+      throw new LocalDockError(
+        `Invalid database user: ${site.dbUser}`,
+        LocalDockErrorCode.DB_EXPORT_FAILED,
+        false
+      );
+    }
 
     const tmpRemote = `/tmp/localdock_${site.dbName}_${Date.now()}.sql`;
     const localDockDir = path.join(localSitePath, '.localdock');
@@ -99,6 +106,13 @@ export class DatabaseSyncer {
     if (!isValidDbIdentifier(site.dbName)) {
       throw new LocalDockError(
         `Invalid database name: ${site.dbName}`,
+        LocalDockErrorCode.DB_IMPORT_FAILED,
+        false
+      );
+    }
+    if (!isValidDbIdentifier(site.dbUser)) {
+      throw new LocalDockError(
+        `Invalid database user: ${site.dbUser}`,
         LocalDockErrorCode.DB_IMPORT_FAILED,
         false
       );

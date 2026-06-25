@@ -20,6 +20,28 @@ export function withProgress<T>(task: ProgressTask<T>): Thenable<T> {
   );
 }
 
+/**
+ * Build a vscode.Progress-compatible adapter that maps "(done / total)" messages
+ * from FileSyncer onto a caller-defined percentage window [basePercent, maxPercent].
+ */
+export function makeProgressAdapter(
+  report: (pct: number, msg: string) => void,
+  basePercent: number,
+  maxPercent: number
+): { report: (opts: { message?: string; increment?: number }) => void } {
+  const range = maxPercent - basePercent;
+  return {
+    report: ({ message }) => {
+      if (!message) { return; }
+      const match = message.match(/\((\d+) \/ (\d+)\)/);
+      const pct = match
+        ? Math.round((parseInt(match[1], 10) / parseInt(match[2], 10)) * range) + basePercent
+        : basePercent;
+      report(pct, message);
+    },
+  };
+}
+
 /** Simple semaphore for limiting concurrency */
 export class Semaphore {
   private queue: Array<() => void> = [];
