@@ -33,7 +33,7 @@ export async function stopLocal(
     localEnv: { ...site.localEnv, status: 'stopping' as const },
   };
   await registry.updateSite(stoppingSite);
-  siteTreeProvider.updateSiteState(stoppingSite);
+  void siteTreeProvider.updateSiteState(stoppingSite);
   localDockerTreeProvider.refresh();
 
   try {
@@ -46,7 +46,7 @@ export async function stopLocal(
       localEnv: { status: 'stopped' as const, port: site.localEnv.port },
     };
     await registry.updateSite(stoppedSite);
-    siteTreeProvider.updateSiteState(stoppedSite);
+    void siteTreeProvider.updateSiteState(stoppedSite);
     localDockerTreeProvider.refresh();
 
   } catch (err) {
@@ -61,7 +61,7 @@ export async function stopLocal(
       },
     };
     await registry.updateSite(errorSite);
-    siteTreeProvider.updateSiteState(errorSite);
+    void siteTreeProvider.updateSiteState(errorSite);
     localDockerTreeProvider.refresh();
 
     handleError('stopLocal', err);
