@@ -2,7 +2,7 @@
   "name": "localdock-cpanel",
   "displayName": "LocalDock for cPanel",
   "description": "Pull, edit, and push WordPress sites hosted on cPanel/WHM — like LocalWP but for live servers.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "incompletebiped",
   "repository": {
     "type": "git",
@@ -155,19 +155,24 @@
       "localdock-cpanel": [
         {
           "id": "localdockCpanel.serverTree",
-          "name": "Servers"
+          "name": "Servers",
+          "initialSize": 1,
+          "visibility": "collapsed"
         },
         {
           "id": "localdockCpanel.siteTree",
-          "name": "WordPress Sites"
+          "name": "WordPress Sites",
+          "initialSize": 6
         },
         {
           "id": "localdockCpanel.activityTree",
-          "name": "Activity"
+          "name": "Activity",
+          "initialSize": 1
         },
         {
           "id": "localdockCpanel.localDockerTree",
-          "name": "Local Environments"
+          "name": "Local Environments",
+          "initialSize": 2
         }
       ]
     },
