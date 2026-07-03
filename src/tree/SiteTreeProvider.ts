@@ -32,14 +32,18 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
     // Re-discover sites on all servers
     const servers = this.registry.getServers();
     for (const server of servers) {
-      void this.discoverSites(server.id);
+      this.discoverSites(server.id).catch((err) =>
+        logger.error(`[SiteTreeProvider] discoverSites failed for ${server.host}: ${err instanceof Error ? err.message : String(err)}`)
+      );
     }
     this._onDidChangeTreeData.fire();
   }
 
   /** Called externally when a new server is added */
   discoverForServer(serverId: string): void {
-    void this.discoverSites(serverId);
+    this.discoverSites(serverId).catch((err) =>
+      logger.error(`[SiteTreeProvider] discoverSites failed: ${err instanceof Error ? err.message : String(err)}`)
+    );
   }
 
   getTreeItem(element: SiteNode): vscode.TreeItem {
@@ -64,7 +68,9 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
       const sites = this.registry.getSites(server.id);
 
       if (sites.length === 0) {
-        void this.discoverSites(server.id);
+        this.discoverSites(server.id).catch((err) =>
+          logger.error(`[SiteTreeProvider] discoverSites failed: ${err instanceof Error ? err.message : String(err)}`)
+        );
         nodes.push(new LoadingTreeItem());
       } else {
         // Sort alphabetically by domain, applying any in-memory transient state overlay
@@ -81,7 +87,7 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
       return;
     }
 
-    const server = this.registry.getServers().find((s) => s.id === serverId);
+    const server = this.registry.getServer(serverId);
     if (!server) {
       return;
     }
@@ -96,7 +102,7 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
         return;
       }
 
-      const cpanel = new CpanelClient(server, creds, this.configManager.rejectUnauthorizedSsl);
+      const cpanel = new CpanelClient(server, creds, server.rejectUnauthorizedSsl ?? this.configManager.rejectUnauthorizedSsl);
       const domains = await cpanel.listDomains();
       logger.info(`[SiteTreeProvider] Checking ${domains.length} domains on ${server.host} via API`);
 

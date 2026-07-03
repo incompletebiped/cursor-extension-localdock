@@ -24,7 +24,7 @@ export async function checkRemoteDiff(
     return;
   }
 
-  const server = registry.getServers().find((s) => s.id === site.serverId);
+  const server = registry.getServer(site.serverId);
   if (!server) {
     vscode.window.showErrorMessage(`Server not found for "${site.domain}"`);
     return;

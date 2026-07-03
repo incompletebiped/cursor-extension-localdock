@@ -18,6 +18,9 @@ import { handleError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { resolveLocalSitePath } from '../utils/locations';
 import { checkDriveEligibility } from '../utils/driveEligibility';
+import { makeProgressAdapter } from '../utils/progressUtils';
+
+const PULL_PROGRESS = { FILES_START: 10, FILES_END: 90, DB: 92, MANIFEST: 98 } as const;
 
 export async function pullSite(
   item: SiteTreeItem,
@@ -29,7 +32,7 @@ export async function pullSite(
   configManager: ConfigManager
 ): Promise<void> {
   const site = item.site;
-  const server = registry.getServers().find((s) => s.id === site.serverId);
+  const server = registry.getServer(site.serverId);
   if (!server) {
     vscode.window.showErrorMessage(`Server not found for "${site.domain}"`);
     return;
@@ -101,19 +104,7 @@ export async function pullSite(
     });
     const fileSyncer = new FileSyncer(sftp, configManager.maxConcurrentTransfers);
 
-    // Use a fake vscode.Progress adapter so FileSyncer can report through ActivityManager
-    const progressAdapter = {
-      report: ({ message }: { message?: string; increment?: number }) => {
-        if (message) {
-          // Extract percentage from messages like "Downloading files… (42 / 100)"
-          const match = message.match(/\((\d+) \/ (\d+)\)/);
-          const pct = match
-            ? Math.round((parseInt(match[1], 10) / parseInt(match[2], 10)) * 80) + 10 // 10–90%
-            : undefined;
-          report(pct ?? activityManager.getRunning().find(o => o.id === opId)?.progress ?? 0, message);
-        }
-      },
-    };
+    const progressAdapter = makeProgressAdapter(report, PULL_PROGRESS.FILES_START, PULL_PROGRESS.FILES_END);
 
     // When uploads are excluded, still pull plugin-generated subdirectories
     // (UAG/Spectra CSS, Hummingbird bundles, etc.) so they load without needing
@@ -143,10 +134,10 @@ export async function pullSite(
       return;
     }
 
-    report(90, 'Syncing database…');
-    await dbSyncer.pullDatabase({ ...site, dbPass: siteDbPass }, localPath, (msg) => report(92, msg));
+    report(PULL_PROGRESS.FILES_END, 'Syncing database…');
+    await dbSyncer.pullDatabase({ ...site, dbPass: siteDbPass }, localPath, (msg) => report(PULL_PROGRESS.DB, msg));
 
-    report(98, 'Writing manifest…');
+    report(PULL_PROGRESS.MANIFEST, 'Writing manifest…');
     const manifest: SiteManifest = {
       version: 1,
       domain: site.domain,

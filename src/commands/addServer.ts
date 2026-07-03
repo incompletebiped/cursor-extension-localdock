@@ -9,7 +9,7 @@ import { ConfigManager } from '../utils/configManager';
 import { CpanelServer } from '../models/Server';
 import { handleError } from '../utils/errors';
 import { CpanelClient } from '../api/CpanelClient';
-import { normalizeHostname, promptCredentials, testConnectionWithFallback } from './serverHelpers';
+import { normalizeHostname, promptCredentials, isCertError } from './serverHelpers';
 
 export async function addServer(
   registry: SiteRegistry,
@@ -45,7 +45,7 @@ export async function addServer(
       value: String(configManager.sshPort),
       ignoreFocusOut: true,
       validateInput: (v) =>
-        Number.isInteger(Number(v)) && Number(v) > 0 ? undefined : 'Enter a valid port number',
+        Number.isInteger(Number(v)) && Number(v) > 0 && Number(v) <= 65535 ? undefined : 'Enter a valid port number (1–65535)',
     });
     if (sshPortStr === undefined) { return; }
 
@@ -70,39 +70,73 @@ export async function addServer(
       createdAt: new Date().toISOString(),
     };
 
-    // Test cPanel HTTPS API first (no SSH required)
+    // Test cPanel HTTPS API first (no SSH required). Try strict SSL; on a cert error
+    // warn the user explicitly before retrying without SSL verification.
     let saved = false;
-    await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `Connecting to ${host} via cPanel API…` },
-      async () => {
-        const cpanel = new CpanelClient(
-          server,
-          { ...creds, serverId: server.id },
-          false // try without strict SSL first
-        );
-        const result = await cpanel.testApiConnection();
-        if (result.success) {
-          saved = true;
-        } else {
-          throw new Error(result.error ?? 'cPanel API connection failed');
-        }
+    let acceptInsecureSsl = false;
+
+    const tryCpanelApi = async (strictSsl: boolean) => {
+      const cpanel = new CpanelClient(server, { ...creds, serverId: server.id }, strictSsl);
+      const result = await cpanel.testApiConnection();
+      if (!result.success) {
+        throw new Error(result.error ?? 'cPanel API connection failed');
       }
-    ).then(undefined, async (err: Error) => {
+    };
+
+    const handleApiFailure = async (err: Error) => {
+      if (isCertError(err.message)) {
+        const choice = await vscode.window.showWarningMessage(
+          `SSL certificate error connecting to ${host}.\n\n` +
+          `The certificate could not be verified — it may be self-signed or expired. ` +
+          `Connecting without SSL verification is less secure.`,
+          { modal: true },
+          'Connect Without SSL Verification',
+          'Save Anyway'
+        );
+        if (choice === 'Connect Without SSL Verification') {
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `Retrying ${host} without SSL verification…` },
+            () => tryCpanelApi(false)
+          ).then(
+            () => { acceptInsecureSsl = true; saved = true; },
+            async (retryErr: Error) => {
+              const s = await vscode.window.showWarningMessage(
+                `Still could not connect: ${retryErr.message}\n\nSave server anyway?`,
+                { modal: true },
+                'Save Anyway'
+              );
+              if (s === 'Save Anyway') { acceptInsecureSsl = true; saved = true; }
+            }
+          );
+        } else if (choice === 'Save Anyway') {
+          saved = true;
+        }
+        return;
+      }
+
       const isAuth = err.message.toLowerCase().includes('invalid') ||
                      err.message.includes('401') || err.message.includes('403');
       const detail = isAuth
         ? `Wrong username or password.\n\nMake sure you're using your cPanel login credentials (not your email).`
         : `Could not reach cPanel at https://${host}:2083\n\n${err.message}`;
-
       const choice = await vscode.window.showWarningMessage(
         `cPanel connection failed — ${detail}`,
         { modal: true },
         'Save Anyway'
       );
       if (choice === 'Save Anyway') { saved = true; }
-    });
+    };
+
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Connecting to ${host} via cPanel API…` },
+      () => tryCpanelApi(true)
+    ).then(() => { saved = true; }, handleApiFailure);
 
     if (!saved) { return; }
+
+    if (acceptInsecureSsl) {
+      server.rejectUnauthorizedSsl = false;
+    }
 
     await credManager.store(server.id, creds);
     await registry.addServer(server);

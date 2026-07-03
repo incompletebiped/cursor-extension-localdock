@@ -64,7 +64,7 @@ export async function startLocal(
     localEnv: { status: 'starting' as const },
   };
   await registry.updateSite(startingSite);
-  siteTreeProvider.updateSiteState(startingSite);
+  void siteTreeProvider.updateSiteState(startingSite);
   localDockerTreeProvider.refresh();
 
   try {
@@ -209,7 +209,7 @@ export async function startLocal(
       localEnv: { status: 'running' as const, port, url: localUrl },
     };
     await registry.updateSite(runningSite);
-    siteTreeProvider.updateSiteState(runningSite);
+    void siteTreeProvider.updateSiteState(runningSite);
     localDockerTreeProvider.refresh();
 
     // Auto-open in Cursor browser
@@ -228,7 +228,7 @@ export async function startLocal(
       },
     };
     await registry.updateSite(errorSite);
-    siteTreeProvider.updateSiteState(errorSite);
+    void siteTreeProvider.updateSiteState(errorSite);
     localDockerTreeProvider.refresh();
 
     handleError('startLocal', err);

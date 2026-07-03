@@ -70,7 +70,7 @@ export async function resetLocalConfig(
 
     const stoppedSite = { ...site, localEnv: { status: 'stopped' as const } };
     await registry.updateSite(stoppedSite);
-    siteTreeProvider.updateSiteState(stoppedSite);
+    void siteTreeProvider.updateSiteState(stoppedSite);
     localDockerTreeProvider.refresh();
   }
 
@@ -96,7 +96,7 @@ export async function resetLocalConfig(
   // Clear the localEnv state so the UI shows "not initialized"
   const resetSite = { ...site, localEnv: undefined };
   await registry.updateSite(resetSite);
-  siteTreeProvider.updateSiteState(resetSite);
+  void siteTreeProvider.updateSiteState(resetSite);
   localDockerTreeProvider.refresh();
 
   vscode.window.showInformationMessage(

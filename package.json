@@ -11,9 +11,19 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
-  "keywords": ["wordpress", "cpanel", "sftp", "ssh", "whm"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "wordpress",
+    "cpanel",
+    "sftp",
+    "ssh",
+    "whm"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -157,19 +167,24 @@
       "localdock-cpanel": [
         {
           "id": "localdockCpanel.serverTree",
-          "name": "Servers"
+          "name": "Servers",
+          "initialSize": 1,
+          "visibility": "collapsed"
         },
         {
           "id": "localdockCpanel.siteTree",
-          "name": "WordPress Sites"
+          "name": "WordPress Sites",
+          "initialSize": 6
         },
         {
           "id": "localdockCpanel.activityTree",
-          "name": "Activity"
+          "name": "Activity",
+          "initialSize": 1
         },
         {
           "id": "localdockCpanel.localDockerTree",
-          "name": "Local Environments"
+          "name": "Local Environments",
+          "initialSize": 2
         }
       ]
     },
@@ -374,7 +389,9 @@
         },
         "localdockCpanel.excludePatterns": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [
             "wp-content/uploads/**",
             "wp-content/cache/**",
@@ -387,7 +404,10 @@
         },
         "localdockCpanel.databaseSyncMethod": {
           "type": "string",
-          "enum": ["mysqldump", "wpcli"],
+          "enum": [
+            "mysqldump",
+            "wpcli"
+          ],
           "default": "mysqldump",
           "description": "Method to use for database export/import."
         },
@@ -408,8 +428,13 @@
         },
         "localdockCpanel.uploadsSyncPaths": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["uag-plugin/**", "hummingbird-assets/**"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "uag-plugin/**",
+            "hummingbird-assets/**"
+          ],
           "description": "Upload subdirectory globs that are always pulled even when pullUploads is false. Paths are relative to wp-content/uploads/. Used for plugin-generated CSS/JS (Spectra/UAG, Hummingbird, etc.) so local environments load the correct styles."
         }
       }
@@ -421,7 +446,8 @@
     "build": "node esbuild.js",
     "build:prod": "node esbuild.js --production",
     "watch": "node esbuild.js --watch",
-    "lint": "eslint src --ext ts",
+    "lint": "eslint src/",
+    "test": "vitest run",
     "package": "vsce package",
     "publish": "vsce publish"
   },
@@ -438,6 +464,8 @@
     "@typescript-eslint/parser": "^8.0.0",
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.24.0",
-    "typescript": "^5.6.0"
+    "eslint": "^9.39.4",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.9"
   }
 }

@@ -18,6 +18,9 @@ import { DockerManager } from '../docker/DockerManager';
 import { WordPressSite } from '../models/Site';
 import { handleError } from '../utils/errors';
 import { logger } from '../utils/logger';
+import { makeProgressAdapter } from '../utils/progressUtils';
+
+const PUSH_PROGRESS = { FILES_START: 10, FILES_END: 80, DB_EXPORT: 82, DB_IMPORT: 85, URL_REWRITE: 87, CACHE: 94, MANIFEST: 97 } as const;
 
 export async function pushSite(
   item: SiteTreeItem,
@@ -37,7 +40,7 @@ export async function pushSite(
     return;
   }
 
-  const server = registry.getServers().find((s) => s.id === site.serverId);
+  const server = registry.getServer(site.serverId);
   if (!server) {
     vscode.window.showErrorMessage(`Server not found for site "${site.domain}"`);
     return;
@@ -150,17 +153,7 @@ export async function pushSite(
     });
     const fileSyncer = new FileSyncer(sftp, configManager.maxConcurrentTransfers);
 
-    const progressAdapter = {
-      report: ({ message }: { message?: string; increment?: number }) => {
-        if (message) {
-          const match = message.match(/\((\d+) \/ (\d+)\)/);
-          const pct = match
-            ? Math.round((parseInt(match[1], 10) / parseInt(match[2], 10)) * 70) + 10 // 10–80%
-            : undefined;
-          report(pct ?? activityManager.getRunning().find(o => o.id === opId)?.progress ?? 0, message);
-        }
-      },
-    };
+    const progressAdapter = makeProgressAdapter(report, PUSH_PROGRESS.FILES_START, PUSH_PROGRESS.FILES_END);
 
     let newFileIndex: SiteManifest['fileIndex'] = {};
     if (hasFileChanges) {
@@ -188,7 +181,7 @@ export async function pushSite(
     let dbServiceStarted = false;
     let dockerDumpPath: string | null = null;
     try {
-      report(82, 'Exporting database from Docker…');
+      report(PUSH_PROGRESS.DB_EXPORT, 'Exporting database from Docker…');
 
       let sql: string;
       try {
@@ -199,10 +192,10 @@ export async function pushSite(
           throw firstErr;
         }
         // Containers not running — start just the db service for the export
-        report(82, 'Starting database container for export…');
+        report(PUSH_PROGRESS.DB_EXPORT, 'Starting database container for export…');
         await dockerManager.startDbOnly(site.localPath!);
         dbServiceStarted = true;
-        report(83, 'Exporting database from Docker…');
+        report(PUSH_PROGRESS.DB_EXPORT + 1, 'Exporting database from Docker…');
         sql = await dockerManager.exportDatabase(site.localPath!);
       }
 
@@ -211,13 +204,13 @@ export async function pushSite(
         await fs.writeFile(dockerDumpPath, sql, 'utf-8');
         logger.info(`[pushSite] DB dump: ${sql.length} bytes`);
 
-        report(84, 'Pushing database…');
-        await dbSyncer.pushDatabase({ ...site, dbPass: siteDbPass }, site.localPath!, (msg) => report(85, msg), dockerDumpPath);
+        report(PUSH_PROGRESS.DB_EXPORT + 2, 'Pushing database…');
+        await dbSyncer.pushDatabase({ ...site, dbPass: siteDbPass }, site.localPath!, (msg) => report(PUSH_PROGRESS.DB_IMPORT, msg), dockerDumpPath);
 
         const localUrl = manifest.localPort ? `http://localhost:${manifest.localPort}` : undefined;
         const productionUrl = `https://${site.domain}`;
         if (localUrl && localUrl !== productionUrl) {
-          await dbSyncer.fixUrlsOnServer({ ...site, dbPass: siteDbPass }, localUrl, productionUrl, (msg) => report(87, msg));
+          await dbSyncer.fixUrlsOnServer({ ...site, dbPass: siteDbPass }, localUrl, productionUrl, (msg) => report(PUSH_PROGRESS.URL_REWRITE, msg));
         }
         dbPushed = true;
       } else {
@@ -238,12 +231,12 @@ export async function pushSite(
     }
 
     // Clear production page cache so Hummingbird/WP Rocket don't serve stale HTML
-    report(94, 'Clearing production cache…');
+    report(PUSH_PROGRESS.CACHE, 'Clearing production cache…');
     await ssh.exec(`rm -rf "${site.docroot}/wp-content/cache" 2>/dev/null; true`).catch(err =>
       logger.warn(`[pushSite] Cache clear failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`)
     );
 
-    report(97, 'Updating manifest…');
+    report(PUSH_PROGRESS.MANIFEST, 'Updating manifest…');
     const updatedManifest = {
       ...manifest,
       fileIndex: Object.fromEntries(

@@ -158,7 +158,7 @@ export class CpanelClient {
    * Detect WordPress using SSH+SFTP (faster, used when SSH is available).
    */
   private validateDocroot(docroot: string): void {
-    if (!/^\/[a-zA-Z0-9_.\-/]+$/.test(docroot)) {
+    if (!/^\/[a-zA-Z0-9_.\-/]+$/.test(docroot) || docroot.includes('..')) {
       throw new Error(`Unsafe docroot path rejected: ${docroot}`);
     }
   }

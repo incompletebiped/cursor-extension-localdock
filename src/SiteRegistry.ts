@@ -18,6 +18,10 @@ export class SiteRegistry {
     return this.context.globalState.get<CpanelServer[]>(SERVERS_KEY, []);
   }
 
+  getServer(id: string): CpanelServer | undefined {
+    return this.getServers().find((s) => s.id === id);
+  }
+
   async addServer(server: CpanelServer): Promise<void> {
     const servers = this.getServers();
     servers.push(server);

@@ -2,6 +2,21 @@
 
 All notable changes to **LocalDock for cPanel** are documented here.
 
+## [0.1.2] — 2026-06-24
+
+### Security
+- **SSL certificate handling** — `Add Server` and `Edit Server` now try strict SSL first and only offer to bypass verification after an explicit cert error warning. The choice is stored per-server so future operations respect it.
+- **Shell injection guard** — database user is now validated (alphanumeric + underscore only) before being interpolated into remote `mysqldump`/`mysql` commands, matching the existing guard on database name.
+- **Path traversal fix** — remote docroot validation now explicitly rejects paths containing `..`.
+- **Port validation** — SSH port input now enforces the valid range (1–65535).
+
+### Code Quality
+- **ESLint** — `eslint.config.mjs` added; `npm run lint` now works with ESLint 9 flat config and enforces `no-floating-promises`.
+- **Unit tests** — `npm test` (Vitest) added with 20 tests covering `DatabaseSyncer.rewriteLineUrls` (PHP serialized URL rewriting) and `pathUtils` helpers.
+- **`SiteRegistry.getServer(id)`** — new method eliminates repeated `.find()` calls across command files.
+- **Progress adapter** — `makeProgressAdapter` extracted to `progressUtils`; pull and push commands use named constants instead of magic percentages.
+- **Floating promises** — all unhandled promise warnings fixed; `SiteTreeProvider` discovery failures now log to the Output panel instead of silently disappearing.
+
 ## [0.1.0] — 2026-06-19
 
 First installable release. The full round trip — pull → run locally in Docker → edit → push to
