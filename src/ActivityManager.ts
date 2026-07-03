@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 
-export type OperationType = 'pull' | 'push' | 'start-local' | 'stop-local' | 'check-remote';
+export type OperationType = 'pull' | 'push' | 'start-local' | 'stop-local' | 'check-remote' | 'provision-companion';
 export type OperationStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface Operation {
@@ -21,6 +21,12 @@ export class ActivityManager {
   private running = new Map<string, { op: Operation; tokenSource: vscode.CancellationTokenSource }>();
   private history: Operation[] = [];
   private readonly MAX_HISTORY = 20;
+  // Per-operation throttle for progress refresh events. With high SFTP
+  // concurrency, dozens of files can complete within the same tick, each
+  // calling update() — without this, that fires a tree refresh per file,
+  // which VS Code coalesces unpredictably and makes the % jump erratically.
+  private lastUpdateEmit = new Map<string, number>();
+  private static readonly UPDATE_THROTTLE_MS = 150;
 
   private _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
@@ -46,6 +52,15 @@ export class ActivityManager {
     if (!entry) { return; }
     entry.op.progress = progress;
     entry.op.message = message;
+
+    // State above is always current; only the UI refresh is throttled, so the
+    // next tick (ours or another operation's) always shows the latest values.
+    const now = Date.now();
+    const lastEmit = this.lastUpdateEmit.get(id) ?? 0;
+    if (now - lastEmit < ActivityManager.UPDATE_THROTTLE_MS) {
+      return;
+    }
+    this.lastUpdateEmit.set(id, now);
     this._onDidChange.fire();
   }
 
@@ -92,6 +107,7 @@ export class ActivityManager {
     entry.op.progress = status === 'completed' ? 100 : entry.op.progress;
     entry.tokenSource.dispose();
     this.running.delete(id);
+    this.lastUpdateEmit.delete(id);
     this.history.unshift(entry.op);
     if (this.history.length > this.MAX_HISTORY) {
       this.history.length = this.MAX_HISTORY;

@@ -4,6 +4,7 @@ import { StoredCredentials, ResolvedCredentials } from '../models/Credentials';
 const SECRET_KEY_PREFIX = 'localdock.creds.';
 const LOCAL_MYSQL_PASSWORD_KEY = 'localdock.localMysqlPassword';
 const DB_PASS_KEY_PREFIX = 'localdock.dbpass.';
+const COMPANION_KEY_PREFIX = 'localdock.companionKey.';
 
 export class CredentialManager {
   constructor(private readonly context: vscode.ExtensionContext) {}
@@ -46,5 +47,17 @@ export class CredentialManager {
 
   async deleteDbPassword(siteId: string): Promise<void> {
     await this.context.secrets.delete(DB_PASS_KEY_PREFIX + siteId);
+  }
+
+  async storeCompanionKey(siteId: string, apiKey: string): Promise<void> {
+    await this.context.secrets.store(COMPANION_KEY_PREFIX + siteId, apiKey);
+  }
+
+  async getCompanionKey(siteId: string): Promise<string | undefined> {
+    return this.context.secrets.get(COMPANION_KEY_PREFIX + siteId);
+  }
+
+  async deleteCompanionKey(siteId: string): Promise<void> {
+    await this.context.secrets.delete(COMPANION_KEY_PREFIX + siteId);
   }
 }

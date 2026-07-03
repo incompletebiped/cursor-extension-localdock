@@ -4,6 +4,7 @@ src/**
 **/*.map
 esbuild.js
 tsconfig.json
+scripts/**
 
 # Repo / editor / agent config
 .vscode/**
@@ -12,6 +13,13 @@ tsconfig.json
 .gitignore
 .vscodeignore
 ROADMAP.md
+
+# WordPress companion plugin — separate artifact, installed on the live site,
+# never bundled into this extension's .vsix
+wordpress-plugin/**
+
+# Internal design/planning docs — not shipped in the package
+docs/**
 
 # Lockfiles & local artifacts (vsce already prunes devDependencies from node_modules)
 package-lock.json

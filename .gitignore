@@ -4,3 +4,7 @@ dist/
 .env
 *.log
 .DS_Store
+wordpress-plugin/dist/
+
+# GitShift personal account configuration
+**/github-accounts.json

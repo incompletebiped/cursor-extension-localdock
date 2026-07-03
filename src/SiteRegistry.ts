@@ -27,6 +27,7 @@ export class SiteRegistry {
   async removeServer(serverId: string): Promise<void> {
     const sites = this.getSites(serverId);
     await Promise.all(sites.map(s => this.credManager.deleteDbPassword(s.id)));
+    await Promise.all(sites.map(s => this.credManager.deleteCompanionKey(s.id)));
     const servers = this.getServers().filter((s) => s.id !== serverId);
     await this.context.globalState.update(SERVERS_KEY, servers);
     await this.context.globalState.update(SITES_KEY_PREFIX + serverId, undefined);

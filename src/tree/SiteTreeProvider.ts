@@ -6,6 +6,7 @@ import { ConfigManager } from '../utils/configManager';
 import { CpanelClient } from '../api/CpanelClient';
 import { SshClient } from '../api/SshClient';
 import { SftpClient } from '../api/SftpClient';
+import { detectCompanionPlugin } from '../api/CompanionPluginClient';
 import { SiteTreeItem, LoadingTreeItem, EmptyTreeItem } from './SiteTreeItem';
 
 import { WordPressSite } from '../models/Site';
@@ -136,6 +137,16 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
 
           if (!wp) { return null; }
 
+          const companionPlugin = await detectCompanionPlugin(
+            domain.domain,
+            domain.docroot,
+            sshAvailable ? sftp : undefined,
+            this.configManager.rejectUnauthorizedSsl
+          ).catch((err: Error) => {
+            logger.warn(`[SiteTreeProvider] Companion plugin detection failed for ${domain.domain}: ${err.message}`);
+            return 'unknown' as const;
+          });
+
           const existing = this.registry.getSites(serverId).find((s) => s.domain === domain.domain);
 
           // Validate that the previously-pulled folder still exists on disk.
@@ -166,6 +177,8 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
             localPath,
             syncState,
             localEnv,
+            companionPlugin,
+            companionKeyStatus: existing?.companionKeyStatus,
             detectedAt: new Date().toISOString(),
           };
 

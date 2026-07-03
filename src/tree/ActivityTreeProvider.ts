@@ -7,6 +7,7 @@ const TYPE_LABEL: Record<string, string> = {
   'start-local': '▶ Start Local',
   'stop-local': '■ Stop Local',
   'check-remote': '☁ Check Remote',
+  'provision-companion': '⚙ Provision Companion',
 };
 
 class RunningItem extends vscode.TreeItem {

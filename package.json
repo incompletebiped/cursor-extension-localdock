@@ -2,7 +2,7 @@
   "name": "localdock-cpanel",
   "displayName": "LocalDock for cPanel",
   "description": "Pull, edit, and push WordPress sites hosted on cPanel/WHM — like LocalWP but for live servers.",
-  "version": "0.1.1",
+  "version": "0.1.8",
   "publisher": "incompletebiped",
   "repository": {
     "type": "git",
@@ -69,6 +69,18 @@
         "command": "localdockCpanel.checkRemoteDiff",
         "title": "Check Remote for Changes",
         "icon": "$(cloud)",
+        "category": "LocalDock cPanel"
+      },
+      {
+        "command": "localdockCpanel.provisionCompanionPlugin",
+        "title": "Provision Companion Plugin",
+        "icon": "$(package)",
+        "category": "LocalDock cPanel"
+      },
+      {
+        "command": "localdockCpanel.checkCompanionDrift",
+        "title": "Check for Changes (Companion Plugin)",
+        "icon": "$(pulse)",
         "category": "LocalDock cPanel"
       },
       {
@@ -206,6 +218,11 @@
           "group": "sync@1"
         },
         {
+          "command": "localdockCpanel.pullSite",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /pullState_needed/",
+          "group": "inline"
+        },
+        {
           "command": "localdockCpanel.pushSite",
           "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "sync@2"
@@ -221,18 +238,28 @@
           "group": "sync@4"
         },
         {
+          "command": "localdockCpanel.provisionCompanionPlugin",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
+          "group": "companion@1"
+        },
+        {
+          "command": "localdockCpanel.checkCompanionDrift",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
+          "group": "companion@2"
+        },
+        {
           "command": "localdockCpanel.openSiteFolder",
           "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "open@1"
         },
         {
           "command": "localdockCpanel.startLocal",
-          "when": "view == localdockCpanel.siteTree && viewItem =~ /localEnv_(stopped|error)/",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /pullState_ready/ && viewItem =~ /localEnv_(stopped|error)/",
           "group": "local@1"
         },
         {
           "command": "localdockCpanel.startLocal",
-          "when": "view == localdockCpanel.siteTree && viewItem =~ /localEnv_(stopped|error)/",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /pullState_ready/ && viewItem =~ /localEnv_(stopped|error)/",
           "group": "inline"
         },
         {
@@ -366,8 +393,8 @@
         },
         "localdockCpanel.maxConcurrentTransfers": {
           "type": "number",
-          "default": 5,
-          "description": "Maximum concurrent SFTP file transfers."
+          "default": 20,
+          "description": "Maximum concurrent SFTP file transfers. Requests are pipelined over one SSH connection, not one connection per file — safe to raise well above the old default of 5 for sites with many small files. Lower it if a host rate-limits SFTP activity."
         },
         "localdockCpanel.dockerStartPort": {
           "type": "number",
@@ -390,6 +417,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build:prod",
+    "generate:companion": "node scripts/generate-companion-plugin-source.js",
     "build": "node esbuild.js",
     "build:prod": "node esbuild.js --production",
     "watch": "node esbuild.js --watch",

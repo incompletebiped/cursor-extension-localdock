@@ -1,5 +1,6 @@
 // @ts-check
 const esbuild = require('esbuild');
+require('./scripts/generate-companion-plugin-source.js');
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');

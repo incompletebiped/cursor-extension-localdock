@@ -116,9 +116,10 @@ export class SftpClient {
       }
     }
 
-    // Walk subdirectories with limited parallelism (4 concurrent) to stay fast
-    // without overwhelming the SFTP connection
-    const CONCURRENCY = 4;
+    // Walk subdirectories with limited parallelism. Same reasoning as file
+    // downloads — these are pipelined SFTP requests over one connection, so
+    // round-trip latency (not the connection itself) is the constraint.
+    const CONCURRENCY = 16;
     for (let i = 0; i < subdirs.length; i += CONCURRENCY) {
       const batch = subdirs.slice(i, i + CONCURRENCY);
       await Promise.all(
@@ -196,9 +197,20 @@ export class SftpClient {
   }
 
   async mkdir(remotePath: string): Promise<void> {
+    // SFTP servers report "already exists" as the same generic FAILURE status
+    // used for other errors (ssh2 surfaces it as a numeric `.code`, never the
+    // Node fs-style 'EEXIST' string) — so checking the existing directory via
+    // stat first is more reliable than trying to interpret that status code.
+    try {
+      await this.stat(remotePath);
+      return;
+    } catch {
+      // Doesn't exist — fall through and create it.
+    }
+
     return new Promise((resolve, reject) => {
       this.s.mkdir(remotePath, (err) => {
-        if (err && (err as NodeJS.ErrnoException).code !== 'EEXIST') {
+        if (err) {
           return reject(err);
         }
         resolve();

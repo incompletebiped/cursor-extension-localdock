@@ -105,7 +105,11 @@ export class ConfigManager {
   }
 
   get maxConcurrentTransfers(): number {
-    return this.config.get<number>('maxConcurrentTransfers', 5);
+    // SFTP requests here are pipelined over one already-open SSH connection, not
+    // one connection per file, so this is safe to run much higher than it looks —
+    // for sites with thousands of small plugin/theme files, per-file round-trip
+    // latency (not bandwidth) dominates pull time, and that's what this hides.
+    return this.config.get<number>('maxConcurrentTransfers', 20);
   }
 
   get dockerStartPort(): number {

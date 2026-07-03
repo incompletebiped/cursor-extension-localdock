@@ -12,6 +12,7 @@ import { readManifest, writeManifest } from '../sync/Manifest';
 import { handleError, LocalDockError, LocalDockErrorCode } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { checkDriveEligibility } from '../utils/driveEligibility';
+import { canStartLocalEnv } from '../utils/siteStatus';
 
 export async function startLocal(
   item: SiteTreeItem | LocalEnvItem,
@@ -23,14 +24,18 @@ export async function startLocal(
 ): Promise<void> {
   const site = item.site;
 
-  if (!site.localPath) {
-    vscode.window.showWarningMessage(`${site.domain} has not been pulled yet. Pull the site first.`);
+  if (!canStartLocalEnv(site)) {
+    const pullStatus = site.syncState.status;
+    if (pullStatus === 'pulling' || pullStatus === 'pushing') {
+      vscode.window.showWarningMessage(`Cannot start local environment while the site is ${pullStatus}.`);
+    } else {
+      vscode.window.showWarningMessage(`${site.domain} has not been pulled yet. Pull the site first.`);
+    }
     return;
   }
 
-  const pullStatus = site.syncState.status;
-  if (pullStatus === 'not_pulled' || pullStatus === 'pulling' || pullStatus === 'pushing') {
-    vscode.window.showWarningMessage(`Cannot start local environment while the site is ${pullStatus}.`);
+  // canStartLocalEnv() guarantees localPath is set, but doesn't narrow it for TS.
+  if (!site.localPath) {
     return;
   }
 

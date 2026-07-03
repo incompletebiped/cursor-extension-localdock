@@ -51,7 +51,27 @@
       "Bash(npx vsce *)",
       "Bash(node \"C:/Users/baile/AppData/Local/Temp/claude/D--Git-Vault-cursor-extension-localdock/39ba1a0d-0e0d-4f25-a244-c6ecd9a5b5ee/scratchpad/release.mjs\")",
       "Bash(Get-Content \"D:\\\\Git_Vault\\\\cursor-extension-localdock\\\\package.json\")",
-      "Bash(Select-String -Pattern \"rejectUnauthorized|Unauthorized\" -Context 3)"
+      "Bash(Select-String -Pattern \"rejectUnauthorized|Unauthorized\" -Context 3)",
+      "Bash(php -v)",
+      "Bash(xargs -I{} echo {})",
+      "Bash(node esbuild.js --production)",
+      "Bash(node scripts/generate-companion-plugin-source.js)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('package.json','utf8'\\)\\); console.log\\('package.json OK'\\)\")",
+      "Bash(unzip -l \"/d/Git_Vault/cursor-extension-localdock/wordpress-plugin/dist/localdock-companion.zip\")",
+      "Bash(cursor --install-extension \"localdock-cpanel-0.1.2.vsix\")",
+      "Bash(code --install-extension \"localdock-cpanel-0.1.2.vsix\")",
+      "Bash(cursor --install-extension \"localdock-cpanel-0.1.3.vsix\")",
+      "Bash(code --install-extension \"localdock-cpanel-0.1.3.vsix\")",
+      "Bash(cursor --install-extension \"localdock-cpanel-0.1.4.vsix\")",
+      "Bash(code --install-extension \"localdock-cpanel-0.1.4.vsix\")",
+      "Bash(cursor --install-extension \"localdock-cpanel-0.1.5.vsix\")",
+      "Bash(code --install-extension \"localdock-cpanel-0.1.5.vsix\")",
+      "Bash(cursor --install-extension \"localdock-cpanel-0.1.6.vsix\")",
+      "Bash(code --install-extension \"localdock-cpanel-0.1.6.vsix\")",
+      "Bash(cursor --install-extension \"localdock-cpanel-0.1.7.vsix\")",
+      "Bash(code --install-extension \"localdock-cpanel-0.1.7.vsix\")",
+      "Bash(cursor --install-extension \"localdock-cpanel-0.1.8.vsix\")",
+      "Bash(code --install-extension \"localdock-cpanel-0.1.8.vsix\")"
     ]
   }
 }

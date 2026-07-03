@@ -171,13 +171,17 @@ export async function pullSite(
 
     logger.info(`[pullSite] Complete: ${site.domain}`);
 
+    const offerCompanionSetup = finishedSite.companionPlugin !== 'active';
     const choice = await vscode.window.showInformationMessage(
       `Pulled ${site.domain} — ${totalFiles} files downloaded.`,
       'Start Local Environment',
+      ...(offerCompanionSetup ? ['Set Up Companion Plugin'] : []),
       'Dismiss'
     );
     if (choice === 'Start Local Environment') {
       vscode.commands.executeCommand('localdockCpanel.startLocal', new SiteTreeItem(finishedSite));
+    } else if (choice === 'Set Up Companion Plugin') {
+      vscode.commands.executeCommand('localdockCpanel.provisionCompanionPlugin', new SiteTreeItem(finishedSite));
     }
 
   } catch (err) {

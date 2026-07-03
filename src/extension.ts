@@ -29,6 +29,8 @@ import { stopLocal } from './commands/stopLocal';
 import { openLocalSite } from './commands/openLocalSite';
 import { resetLocalConfig } from './commands/resetLocalConfig';
 import { setSitesDirectory } from './commands/setSitesDirectory';
+import { provisionCompanionPlugin } from './commands/provisionCompanionPlugin';
+import { checkCompanionDrift } from './commands/checkCompanionDrift';
 
 let _registry: SiteRegistry | undefined;
 let _dockerManager: DockerManager | undefined;
@@ -138,6 +140,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     vscode.commands.registerCommand('localdockCpanel.checkRemoteDiff', (item: SiteTreeItem) =>
       checkRemoteDiff(item, registry, credManager, activityManager, configManager)
+    ),
+
+    vscode.commands.registerCommand('localdockCpanel.provisionCompanionPlugin', (item: SiteTreeItem) =>
+      provisionCompanionPlugin(item, registry, credManager, siteTreeProvider, activityManager, configManager)
+    ),
+
+    vscode.commands.registerCommand('localdockCpanel.checkCompanionDrift', (item: SiteTreeItem) =>
+      checkCompanionDrift(item, registry, credManager, siteTreeProvider, configManager)
     ),
 
     vscode.commands.registerCommand('localdockCpanel.openSiteFolder', (item: SiteTreeItem) =>

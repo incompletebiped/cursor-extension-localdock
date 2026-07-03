@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { WordPressSite } from '../models/Site';
 import { SyncStatus } from '../models/SyncState';
 import { LocalEnvStatus } from '../models/LocalEnvState';
+import { CompanionPluginStatus, CompanionKeyStatus } from '../models/CompanionPlugin';
+import { getPullBucket } from '../utils/siteStatus';
 
 // ServerTreeItem lives in ServerTreeProvider.ts — re-export for backwards compat
 export { ServerTreeItem } from './ServerTreeProvider';
@@ -10,7 +12,9 @@ export class SiteTreeItem extends vscode.TreeItem {
   constructor(public readonly site: WordPressSite) {
     super(site.domain, vscode.TreeItemCollapsibleState.None);
     const localStatus = site.localEnv?.status ?? 'stopped';
-    this.contextValue = `wordpressSite localEnv_${localStatus}`;
+    const pullBucket = getPullBucket(site);
+    const companionStatus = site.companionPlugin ?? 'unknown';
+    this.contextValue = `wordpressSite pullState_${pullBucket} localEnv_${localStatus} companion_${companionStatus}`;
     this.iconPath = iconForStatus(site.syncState.status);
     this.description = buildDescription(site);
     this.tooltip = buildTooltip(site);
@@ -150,7 +154,35 @@ function buildTooltip(site: WordPressSite): string {
       lines.push(`Local Error: ${site.localEnv.lastError}`);
     }
   }
+  lines.push(`Companion Plugin: ${companionPluginLabel(site.companionPlugin)}`);
+  if (site.companionPlugin === 'active') {
+    lines.push(`Companion Key: ${companionKeyLabel(site.companionKeyStatus)}`);
+  }
   return lines.join('\n');
+}
+
+function companionPluginLabel(status: CompanionPluginStatus | undefined): string {
+  switch (status) {
+    case 'active':
+      return '✓ Active';
+    case 'inactive':
+      return '⚠ Installed, not active';
+    case 'not_installed':
+      return '✗ Not installed';
+    default:
+      return '? Unknown';
+  }
+}
+
+function companionKeyLabel(status: CompanionKeyStatus | undefined): string {
+  switch (status) {
+    case 'valid':
+      return '✓ Valid';
+    case 'invalid':
+      return '✗ Rejected — reprovision';
+    default:
+      return '— Not provisioned';
+  }
 }
 
 function formatRelativeTime(isoString: string): string {
