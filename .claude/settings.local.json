@@ -71,7 +71,9 @@
       "Bash(cursor --install-extension \"localdock-cpanel-0.1.7.vsix\")",
       "Bash(code --install-extension \"localdock-cpanel-0.1.7.vsix\")",
       "Bash(cursor --install-extension \"localdock-cpanel-0.1.8.vsix\")",
-      "Bash(code --install-extension \"localdock-cpanel-0.1.8.vsix\")"
+      "Bash(code --install-extension \"localdock-cpanel-0.1.8.vsix\")",
+      "Bash(git merge-tree *)",
+      "Bash(echo \"exit=$?\")"
     ]
   }
 }
