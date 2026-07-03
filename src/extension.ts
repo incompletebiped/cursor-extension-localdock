@@ -31,6 +31,7 @@ import { resetLocalConfig } from './commands/resetLocalConfig';
 import { setSitesDirectory } from './commands/setSitesDirectory';
 import { provisionCompanionPlugin } from './commands/provisionCompanionPlugin';
 import { checkCompanionDrift } from './commands/checkCompanionDrift';
+import { checkForUpdates } from './utils/selfUpdater';
 
 let _registry: SiteRegistry | undefined;
 let _dockerManager: DockerManager | undefined;
@@ -216,7 +217,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     vscode.commands.registerCommand('localdockCpanel.showOutput', () => {
       logger.show();
-    })
+    }),
+
+    vscode.commands.registerCommand('localdockCpanel.checkForUpdates', () =>
+      checkForUpdates(context, configManager, { silent: false })
+    )
   );
 
   // Cancel all running operations when the extension deactivates
@@ -227,6 +232,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Kick off site discovery for all already-saved servers on activation
   for (const server of registry.getServers()) {
     siteTreeProvider.discoverForServer(server.id);
+  }
+
+  if (configManager.autoCheckForUpdates) {
+    checkForUpdates(context, configManager, { silent: true }).catch((err) =>
+      logger.warn(`[selfUpdater] Startup check failed: ${err}`)
+    );
   }
 
   logger.info('LocalDock for cPanel activated.');

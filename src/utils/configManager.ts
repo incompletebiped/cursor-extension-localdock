@@ -115,4 +115,13 @@ export class ConfigManager {
   get dockerStartPort(): number {
     return this.config.get<number>('dockerStartPort', 8080);
   }
+
+  /** Path to this extension's local git repo, for the developer self-update check. */
+  get devRepoPath(): string {
+    return this.config.get<string>('devRepoPath', '');
+  }
+
+  get autoCheckForUpdates(): boolean {
+    return this.config.get<boolean>('autoCheckForUpdates', true);
+  }
 }

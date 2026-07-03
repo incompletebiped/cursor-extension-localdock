@@ -2,7 +2,7 @@
   "name": "localdock-cpanel",
   "displayName": "LocalDock for cPanel",
   "description": "Pull, edit, and push WordPress sites hosted on cPanel/WHM — like LocalWP but for live servers.",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "publisher": "incompletebiped",
   "repository": {
     "type": "git",
@@ -151,6 +151,12 @@
         "command": "localdockCpanel.setSitesDirectory",
         "title": "Set Local Sites Folder",
         "icon": "$(folder)",
+        "category": "LocalDock cPanel"
+      },
+      {
+        "command": "localdockCpanel.checkForUpdates",
+        "title": "Check for Updates (Dev)",
+        "icon": "$(sync)",
         "category": "LocalDock cPanel"
       }
     ],
@@ -436,6 +442,16 @@
             "hummingbird-assets/**"
           ],
           "description": "Upload subdirectory globs that are always pulled even when pullUploads is false. Paths are relative to wp-content/uploads/. Used for plugin-generated CSS/JS (Spectra/UAG, Hummingbird, etc.) so local environments load the correct styles."
+        },
+        "localdockCpanel.devRepoPath": {
+          "type": "string",
+          "default": "",
+          "description": "Developer use only: path to this extension's local git repo. When set, LocalDock compares the repo's package.json version against the installed version and can rebuild, reinstall, and reload itself when the repo is ahead."
+        },
+        "localdockCpanel.autoCheckForUpdates": {
+          "type": "boolean",
+          "default": true,
+          "description": "When devRepoPath is set, automatically check the repo for a newer version on startup."
         }
       }
     }

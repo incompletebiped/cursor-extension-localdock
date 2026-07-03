@@ -2,6 +2,16 @@
 
 All notable changes to **LocalDock for cPanel** are documented here.
 
+## [0.1.9] — 2026-07-03
+
+### Features
+- **Self-update check (dev workflow)** — new `localdockCpanel.devRepoPath` setting points the extension
+  at its own source repo. On startup (and via the new `LocalDock cPanel: Check for Updates (Dev)`
+  command) it compares the repo's `package.json` version against the installed one and, if the repo
+  is ahead, offers to rebuild, repackage, reinstall, and reload the window — no more manual
+  `vsce package` / `cursor --install-extension` after every change. Opt-in and no-op unless
+  `devRepoPath` is configured.
+
 ## [0.1.2] — 2026-06-24
 
 ### Security
