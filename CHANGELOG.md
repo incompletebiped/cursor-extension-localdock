@@ -2,6 +2,18 @@
 
 All notable changes to **LocalDock for cPanel** are documented here.
 
+## [0.1.10] — 2026-07-03
+
+### Fixes
+- **Stale "pulled" state after manual folder deletion** — deleting a pulled site's local folder
+  outside the extension left it showing a green checkmark in WordPress Sites and a phantom entry
+  under Local Environments, since nothing re-checked the folder until the next window reload.
+  `Refresh Sites` now reconciles every site's local state the same way startup already did: verifies
+  the pulled folder still exists on disk and, for a site marked "running", that its Docker containers
+  are actually still up. Either missing resets the site to Not Pulled (and clears it from Local
+  Environments) instead of leaving it stuck. Extracted the previously activation-only check into
+  `reconcileLocalState()` so both code paths share the same logic.
+
 ## [0.1.9] — 2026-07-03
 
 ### Features

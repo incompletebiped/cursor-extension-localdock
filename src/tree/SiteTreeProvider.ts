@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs/promises';
 import { SiteRegistry } from '../SiteRegistry';
 import { CredentialManager } from '../auth/CredentialManager';
 import { ConfigManager } from '../utils/configManager';
+import { DockerManager } from '../docker/DockerManager';
 import { CpanelClient } from '../api/CpanelClient';
 import { SshClient } from '../api/SshClient';
 import { SftpClient } from '../api/SftpClient';
@@ -11,6 +11,7 @@ import { SiteTreeItem, LoadingTreeItem, EmptyTreeItem } from './SiteTreeItem';
 
 import { WordPressSite } from '../models/Site';
 import { logger } from '../utils/logger';
+import { reconcileLocalState } from '../utils/siteValidation';
 
 type SiteNode = SiteTreeItem | LoadingTreeItem | EmptyTreeItem;
 
@@ -25,18 +26,25 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
   constructor(
     private readonly registry: SiteRegistry,
     private readonly credManager: CredentialManager,
-    private readonly configManager: ConfigManager
+    private readonly configManager: ConfigManager,
+    private readonly dockerManager: DockerManager
   ) {}
 
-  refresh(): void {
-    // Re-discover sites on all servers
+  /**
+   * Re-discover sites on all servers. Returns once every server's discovery
+   * has settled, so callers can chain work (e.g. refreshing the Local
+   * Environments tree) that depends on freshly-reconciled local state.
+   */
+  async refresh(): Promise<void> {
     const servers = this.registry.getServers();
-    for (const server of servers) {
-      this.discoverSites(server.id).catch((err) =>
-        logger.error(`[SiteTreeProvider] discoverSites failed for ${server.host}: ${err instanceof Error ? err.message : String(err)}`)
-      );
-    }
     this._onDidChangeTreeData.fire();
+    await Promise.all(
+      servers.map((server) =>
+        this.discoverSites(server.id).catch((err) =>
+          logger.error(`[SiteTreeProvider] discoverSites failed for ${server.host}: ${err instanceof Error ? err.message : String(err)}`)
+        )
+      )
+    );
   }
 
   /** Called externally when a new server is added */
@@ -155,20 +163,15 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
 
           const existing = this.registry.getSites(serverId).find((s) => s.domain === domain.domain);
 
-          // Validate that the previously-pulled folder still exists on disk.
-          // If the user deleted it outside the extension, reset to not_pulled.
-          let localPath = existing?.localPath;
-          let syncState = existing?.syncState ?? { status: 'not_pulled' as const };
-          let localEnv = existing?.localEnv;
-          if (localPath) {
-            try {
-              await fs.access(localPath);
-            } catch {
-              localPath = undefined;
-              syncState = { status: 'not_pulled' as const };
-              localEnv = undefined;
-            }
-          }
+          // Validate the previously-pulled folder still exists on disk and that a
+          // "running" local env is still actually running in Docker. If the user
+          // deleted the folder (or pruned the containers) outside the extension,
+          // this resets state so the site correctly shows as needing a re-pull
+          // instead of leaving a phantom entry under Local Environments.
+          const reconciled = existing ? await reconcileLocalState(existing, this.dockerManager) : undefined;
+          const localPath = reconciled?.localPath;
+          const syncState = reconciled?.syncState ?? { status: 'not_pulled' as const };
+          const localEnv = reconciled?.localEnv;
 
           const site: WordPressSite = {
             id: `${serverId}::${domain.domain}`,

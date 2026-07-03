@@ -26,7 +26,7 @@ export async function removeServer(
     await registry.removeServer(item.server.id);
 
     serverTreeProvider.refresh();
-    siteTreeProvider.refresh();
+    await siteTreeProvider.refresh();
   } catch (err) {
     handleError('removeServer', err);
   }

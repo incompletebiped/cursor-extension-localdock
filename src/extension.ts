@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs/promises';
 import { logger } from './utils/logger';
 import { ConfigManager } from './utils/configManager';
+import { reconcileLocalState } from './utils/siteValidation';
 import { CredentialManager } from './auth/CredentialManager';
 import { AuthProvider } from './auth/AuthProvider';
 import { SiteRegistry } from './SiteRegistry';
@@ -51,7 +51,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   _dockerManager = dockerManager;
 
   const serverTreeProvider = new ServerTreeProvider(registry);
-  const siteTreeProvider = new SiteTreeProvider(registry, credManager, configManager);
+  const siteTreeProvider = new SiteTreeProvider(registry, credManager, configManager, dockerManager);
   const activityTreeProvider = new ActivityTreeProvider(activityManager);
   const localDockerTreeProvider = new LocalDockerTreeProvider(dockerManager, registry);
 
@@ -59,41 +59,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   await Promise.all(registry.getAllSites().map(async (site) => {
     const s = site.syncState.status;
 
-    // If files were deleted outside the extension, reset to not_pulled
-    if (site.localPath && (s === 'pulled' || s === 'modified' || s === 'error' || s === 'pulling' || s === 'pushing')) {
-      let pathExists = false;
-      try { await fs.access(site.localPath); pathExists = true; } catch { /* deleted */ }
-      if (!pathExists) {
-        await registry.updateSite({
-          ...site,
-          localPath: undefined,
-          localEnv: undefined,
-          syncState: { status: 'not_pulled' },
-        });
+    const reconciled = await reconcileLocalState(site, dockerManager);
+    if (reconciled !== site) {
+      await registry.updateSite(reconciled);
+      if (!reconciled.localPath) {
         return;
-      }
-    }
-
-    // Reconcile Docker running state against actual container status
-    if (site.localEnv?.status === 'running' && site.localPath) {
-      const actual = await dockerManager.getStatus(site.localPath).catch(() => 'stopped' as const);
-      if (actual !== 'running') {
-        await registry.updateSite({ ...site, localEnv: { status: 'stopped' } });
       }
     }
 
     // Reset in-progress states that were interrupted
     if (s === 'pulling' || s === 'pushing') {
       await siteTreeProvider.updateSiteState({
-        ...site,
+        ...reconciled,
         syncState: { status: 'not_pulled' },
       });
     }
-    const ls = site.localEnv?.status;
+    const ls = reconciled.localEnv?.status;
     if (ls === 'starting' || ls === 'stopping') {
       await registry.updateSite({
-        ...site,
-        localEnv: { ...site.localEnv, status: 'stopped' },
+        ...reconciled,
+        localEnv: { ...reconciled.localEnv, status: 'stopped' },
       });
     }
   }));
@@ -124,7 +109,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ),
 
     vscode.commands.registerCommand('localdockCpanel.refreshSites', () =>
-      refreshSites(siteTreeProvider)
+      refreshSites(siteTreeProvider, localDockerTreeProvider)
     ),
 
     vscode.commands.registerCommand('localdockCpanel.pullSite', (item: SiteTreeItem) =>
@@ -204,7 +189,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('localdockCpanel.setSitesDirectory', async () => {
       const changed = await setSitesDirectory();
       if (changed) {
-        siteTreeProvider.refresh();
+        await siteTreeProvider.refresh();
         localDockerTreeProvider.refresh();
       }
     }),
