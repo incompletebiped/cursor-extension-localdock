@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import * as path from 'path';
 import * as child_process from 'child_process';
 import { logger } from './logger';
@@ -34,6 +35,43 @@ const cache = new Map<string, DriveEligibility>();
 /** Clear cached results (e.g. before an interactive folder pick, in case drives changed). */
 export function clearDriveEligibilityCache(): void {
   cache.clear();
+}
+
+function getTrustedDrives(): Set<string> {
+  const list = vscode.workspace
+    .getConfiguration('localdockCpanel')
+    .get<string[]>('trustedRemovableDrives', []);
+  return new Set(list.map((d) => d.replace(/[:\\/]/g, '').toUpperCase()));
+}
+
+/**
+ * Marks a removable drive as trusted for Docker bind-mounts (e.g. an SD card
+ * or USB drive that's effectively permanently attached) and invalidates the
+ * cached eligibility result for it so the next check picks up the change.
+ */
+export async function trustRemovableDrive(driveLetter: string): Promise<void> {
+  const letter = driveLetter.replace(/[:\\/]/g, '').toUpperCase();
+  const config = vscode.workspace.getConfiguration('localdockCpanel');
+  const current = config.get<string[]>('trustedRemovableDrives', []);
+  if (!current.includes(letter)) {
+    await config.update('trustedRemovableDrives', [...current, letter], vscode.ConfigurationTarget.Global);
+  }
+  cache.delete(letter);
+}
+
+/**
+ * True when a drive was rejected only for being non-fixed (removable/hot-swappable)
+ * while its filesystem is otherwise Docker-compatible (NTFS/ReFS) — i.e. a drive
+ * the user could reasonably choose to trust rather than one that's fundamentally
+ * incompatible (exFAT/FAT/network).
+ */
+export function isTrustCandidate(eligibility: DriveEligibility): boolean {
+  return (
+    !eligibility.eligible &&
+    eligibility.driveType === 'Removable' &&
+    !!eligibility.fileSystem &&
+    ELIGIBLE_FILESYSTEMS.includes(eligibility.fileSystem)
+  );
 }
 
 /**
@@ -99,7 +137,9 @@ function queryVolume(driveLetter: string): Promise<DriveEligibility> {
         const parsed = JSON.parse(stdout.trim()) as { DriveType?: string; FileSystemType?: string };
         const driveType = String(parsed.DriveType ?? '');
         const fileSystem = String(parsed.FileSystemType ?? '');
-        const eligible = driveType === 'Fixed' && ELIGIBLE_FILESYSTEMS.includes(fileSystem);
+        const fsOk = ELIGIBLE_FILESYSTEMS.includes(fileSystem);
+        const trusted = driveType === 'Removable' && fsOk && getTrustedDrives().has(driveLetter);
+        const eligible = (driveType === 'Fixed' && fsOk) || trusted;
         resolve({
           eligible,
           driveLetter,

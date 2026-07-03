@@ -2,6 +2,40 @@
 
 All notable changes to **LocalDock for cPanel** are documented here.
 
+## [0.1.13] — 2026-07-03
+
+### Fixes
+- **Sites pulled under an old Local Sites Folder kept showing as pulled** — changing
+  `localdockCpanel.localSitesDirectory` (e.g. switching to a different drive) only affects *future*
+  pulls; it doesn't move anything already on disk. A site pulled under a previous setting kept its
+  original `localPath`, so `reconcileLocalState` found its manifest right where it left it and kept
+  reporting it as pulled — correct on its own terms, but not what "only sites on the selected drive"
+  means to the user. Sites whose stored `localPath` falls outside the *current* Local Sites Folder
+  are now treated as not pulled regardless of whether the old folder is still intact elsewhere.
+
+## [0.1.12] — 2026-07-03
+
+### Fixes
+- **Stale "pulled" state survived deleting a folder's contents** — 0.1.10's reconciliation check
+  (`reconcileLocalState`) only verified the pulled folder itself still existed. Deleting everything
+  *inside* the folder (rather than the folder itself) left an empty directory behind, which still
+  passed that check, so the site kept its checkmark and kept showing under Local Environments.
+  The check now looks for `.localdock/manifest.json` instead of the bare folder — the marker file
+  written on a completed pull, which is gone along with everything else once the contents are
+  deleted. Missing manifest now correctly resets the site to Not Pulled on Refresh Sites.
+
+## [0.1.11] — 2026-07-03
+
+### Features
+- **Trust a removable drive for Docker bind-mounts** — Docker Desktop normally only bind-mounts
+  fixed NTFS/ReFS drives, so a removable-but-NTFS drive (e.g. an SD card or USB drive that's kept
+  permanently attached) previously triggered a hard block on every pull/start, with no way around
+  it short of moving everything to `C:`. The eligibility warning now offers a "Trust This Drive"
+  button (shown when picking a Local Sites Folder or when a pull is blocked) that records the drive
+  letter in the new `localdockCpanel.trustedRemovableDrives` setting. Once trusted, that drive is
+  treated as eligible everywhere without asking again. Still hard-blocks exFAT/FAT and network
+  drives, which genuinely can't be bind-mounted regardless of trust.
+
 ## [0.1.10] — 2026-07-03
 
 ### Fixes

@@ -76,7 +76,9 @@
       "Bash(echo \"exit=$?\")",
       "Bash(\"/c/Users/baile/AppData/Local/Programs/cursor/resources/app/bin/cursor\" --install-extension \"localdock-cpanel-0.1.8.vsix\" --force)",
       "Bash(where cursor *)",
-      "Bash(where npm *)"
+      "Bash(where npm *)",
+      "Read(//d/KillianDNS/**)",
+      "Read(//d/KillianDNS/demo.baileykillian.com/**)"
     ]
   }
 }

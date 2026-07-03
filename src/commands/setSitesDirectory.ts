@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
-import { checkDriveEligibility, clearDriveEligibilityCache } from '../utils/driveEligibility';
+import { checkDriveEligibility, clearDriveEligibilityCache, isTrustCandidate, trustRemovableDrive } from '../utils/driveEligibility';
 import { resolveSitesBaseDir } from '../utils/locations';
 import { logger } from '../utils/logger';
 
 /**
  * Prompt the user to choose a local sites directory via a folder picker, gating
  * the selection on drive eligibility. An ineligible drive (removable / exFAT /
- * network) is rejected with an explanation and the user is re-prompted.
+ * network) is rejected with an explanation and the user is re-prompted — unless
+ * it's removable but NTFS/ReFS, in which case they can choose to trust it (e.g.
+ * an SD card that's effectively permanently attached).
  *
  * Returns the chosen directory, or undefined if cancelled.
  */
@@ -35,14 +37,29 @@ export async function setSitesDirectory(): Promise<string | undefined> {
 
     if (!eligibility.eligible) {
       logger.warn(`[setSitesDirectory] Rejected ineligible folder ${dir}: ${eligibility.reason}`);
+
+      const canTrust = isTrustCandidate(eligibility);
+      const buttons = canTrust ? ['Trust This Drive', 'Choose Another Folder'] : ['Choose Another Folder'];
       const choice = await vscode.window.showErrorMessage(
         eligibility.reason ?? "That folder is on a drive Docker Desktop can't use.",
-        'Choose Another Folder'
+        ...buttons
       );
-      if (choice === 'Choose Another Folder') {
+
+      if (choice === 'Trust This Drive' && eligibility.driveLetter) {
+        await trustRemovableDrive(eligibility.driveLetter);
+        logger.info(`[setSitesDirectory] Drive ${eligibility.driveLetter}: marked as trusted for Docker bind-mounts`);
+        // Re-check now that the drive is trusted — falls through to the normal save path below.
+        const recheck = await checkDriveEligibility(dir);
+        if (!recheck.eligible) {
+          // Shouldn't happen, but don't silently proceed on an actually-ineligible drive.
+          vscode.window.showErrorMessage(recheck.reason ?? "That folder is still on a drive Docker Desktop can't use.");
+          continue;
+        }
+      } else if (choice === 'Choose Another Folder') {
         continue;
+      } else {
+        return undefined;
       }
-      return undefined;
     }
 
     await vscode.workspace

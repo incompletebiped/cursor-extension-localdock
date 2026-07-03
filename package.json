@@ -2,7 +2,7 @@
   "name": "localdock-cpanel",
   "displayName": "LocalDock for cPanel",
   "description": "Pull, edit, and push WordPress sites hosted on cPanel/WHM — like LocalWP but for live servers.",
-  "version": "0.1.10",
+  "version": "0.1.13",
   "publisher": "incompletebiped",
   "repository": {
     "type": "git",
@@ -452,6 +452,14 @@
           "type": "boolean",
           "default": true,
           "description": "When devRepoPath is set, automatically check the repo for a newer version on startup."
+        },
+        "localdockCpanel.trustedRemovableDrives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Drive letters (e.g. \"D\") that are removable but should still be treated as eligible for Docker bind-mounts — for an NTFS SD card or USB drive that's effectively permanently attached. Only applies to drives formatted NTFS/ReFS; exFAT/FAT and network drives are never eligible. Populated automatically when you choose \"Trust This Drive\" after a drive-eligibility warning."
         }
       }
     }

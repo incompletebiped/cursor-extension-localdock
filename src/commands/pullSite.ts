@@ -17,7 +17,7 @@ import { sanitizeDbName } from '../utils/pathUtils';
 import { handleError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { resolveLocalSitePath } from '../utils/locations';
-import { checkDriveEligibility } from '../utils/driveEligibility';
+import { checkDriveEligibility, isTrustCandidate, trustRemovableDrive } from '../utils/driveEligibility';
 import { makeProgressAdapter } from '../utils/progressUtils';
 
 const PULL_PROGRESS = { FILES_START: 10, FILES_END: 90, DB: 92, MANIFEST: 98 } as const;
@@ -54,7 +54,23 @@ export async function pullSite(
 
   // Preflight: refuse to download onto a drive Docker can't bind-mount, instead
   // of wasting a multi-minute transfer that "Start Local" would later reject.
-  const eligibility = await checkDriveEligibility(localPath);
+  let eligibility = await checkDriveEligibility(localPath);
+  if (!eligibility.eligible && isTrustCandidate(eligibility) && eligibility.driveLetter) {
+    const choice = await vscode.window.showErrorMessage(
+      `Can't pull ${site.domain} to ${localPath}. ${eligibility.reason ?? ''}`,
+      'Trust This Drive',
+      'Choose Folder…'
+    );
+    if (choice === 'Trust This Drive') {
+      await trustRemovableDrive(eligibility.driveLetter);
+      eligibility = await checkDriveEligibility(localPath);
+    } else if (choice === 'Choose Folder…') {
+      await vscode.commands.executeCommand('localdockCpanel.setSitesDirectory');
+      return;
+    } else {
+      return;
+    }
+  }
   if (!eligibility.eligible) {
     const choice = await vscode.window.showErrorMessage(
       `Can't pull ${site.domain} to ${localPath}. ${eligibility.reason ?? ''}`,
