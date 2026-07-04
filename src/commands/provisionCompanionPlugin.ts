@@ -6,6 +6,7 @@ import { CredentialManager } from '../auth/CredentialManager';
 import { ActivityManager } from '../ActivityManager';
 import { ConfigManager } from '../utils/configManager';
 import { SshClient } from '../api/SshClient';
+import { connectPinned } from '../api/sshConnect';
 import { SftpClient } from '../api/SftpClient';
 import { WordPressSite } from '../models/Site';
 import { provisionCompanionPlugin as runProvision } from '../companion/CompanionProvisioner';
@@ -84,7 +85,7 @@ export async function provisionCompanionPlugin(
   let message = '';
 
   try {
-    await ssh.connect(server, creds);
+    await connectPinned(ssh, server, creds, registry);
     await sftp.open(ssh);
 
     if (token.isCancellationRequested) {

@@ -8,3 +8,6 @@ wordpress-plugin/dist/
 
 # GitShift personal account configuration
 **/github-accounts.json
+
+# Local Claude Code permissions — personal machine paths, not project config
+.claude/settings.local.json

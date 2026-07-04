@@ -5,6 +5,7 @@ import { CredentialManager } from '../auth/CredentialManager';
 import { ActivityManager } from '../ActivityManager';
 import { ConfigManager } from '../utils/configManager';
 import { SshClient } from '../api/SshClient';
+import { connectPinned } from '../api/sshConnect';
 import { SftpClient } from '../api/SftpClient';
 import { DiffEngine } from '../sync/DiffEngine';
 import { readManifest } from '../sync/Manifest';
@@ -49,7 +50,7 @@ export async function checkRemoteDiff(
   const sftp = new SftpClient();
 
   try {
-    await ssh.connect(server, creds);
+    await connectPinned(ssh, server, creds, registry);
     await sftp.open(ssh);
 
     if (token.isCancellationRequested) {

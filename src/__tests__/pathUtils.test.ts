@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isValidDbIdentifier, sanitizeDbName, isSafePath } from '../utils/pathUtils';
+import { isValidDbIdentifier, isValidDbHost, sanitizeDbName, isSafePath } from '../utils/pathUtils';
 
 describe('isValidDbIdentifier', () => {
   it('accepts alphanumeric and underscore', () => {
@@ -28,6 +28,35 @@ describe('isValidDbIdentifier', () => {
 
   it('rejects dots', () => {
     expect(isValidDbIdentifier('my.db')).toBe(false);
+  });
+});
+
+describe('isValidDbHost', () => {
+  it('accepts plain hostnames and localhost', () => {
+    expect(isValidDbHost('localhost')).toBe(true);
+    expect(isValidDbHost('db.example.com')).toBe(true);
+  });
+
+  it('accepts hostname or IPv4 with a port', () => {
+    expect(isValidDbHost('localhost:3306')).toBe(true);
+    expect(isValidDbHost('127.0.0.1:3306')).toBe(true);
+  });
+
+  it('accepts bracketed IPv6, with and without a port', () => {
+    expect(isValidDbHost('[::1]')).toBe(true);
+    expect(isValidDbHost('[::1]:3306')).toBe(true);
+  });
+
+  it('rejects shell metacharacters injected via a malicious DB_HOST value', () => {
+    expect(isValidDbHost('localhost; rm -rf ~ #')).toBe(false);
+    expect(isValidDbHost('localhost`id`')).toBe(false);
+    expect(isValidDbHost('localhost$(whoami)')).toBe(false);
+    expect(isValidDbHost('localhost|cat /etc/passwd')).toBe(false);
+  });
+
+  it('rejects spaces and quotes', () => {
+    expect(isValidDbHost('local host')).toBe(false);
+    expect(isValidDbHost("localhost'")).toBe(false);
   });
 });
 

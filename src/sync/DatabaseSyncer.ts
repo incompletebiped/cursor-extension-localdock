@@ -9,7 +9,7 @@ import { SshClient } from '../api/SshClient';
 import { SftpClient } from '../api/SftpClient';
 import { WordPressSite } from '../models/Site';
 import { logger } from '../utils/logger';
-import { isValidDbIdentifier, sanitizeDbName } from '../utils/pathUtils';
+import { isValidDbIdentifier, isValidDbHost, sanitizeDbName } from '../utils/pathUtils';
 import { LocalDockError, LocalDockErrorCode } from '../utils/errors';
 
 const exec = util.promisify(child_process.exec);
@@ -48,6 +48,13 @@ export class DatabaseSyncer {
     if (!isValidDbIdentifier(site.dbUser)) {
       throw new LocalDockError(
         `Invalid database user: ${site.dbUser}`,
+        LocalDockErrorCode.DB_EXPORT_FAILED,
+        false
+      );
+    }
+    if (!isValidDbHost(site.dbHost)) {
+      throw new LocalDockError(
+        `Invalid database host: ${site.dbHost}`,
         LocalDockErrorCode.DB_EXPORT_FAILED,
         false
       );
@@ -113,6 +120,13 @@ export class DatabaseSyncer {
     if (!isValidDbIdentifier(site.dbUser)) {
       throw new LocalDockError(
         `Invalid database user: ${site.dbUser}`,
+        LocalDockErrorCode.DB_IMPORT_FAILED,
+        false
+      );
+    }
+    if (!isValidDbHost(site.dbHost)) {
+      throw new LocalDockError(
+        `Invalid database host: ${site.dbHost}`,
         LocalDockErrorCode.DB_IMPORT_FAILED,
         false
       );
@@ -188,6 +202,14 @@ export class DatabaseSyncer {
     const from = localUrl.replace(/\/$/, '');
     const to = productionUrl.replace(/\/$/, '');
     if (!from || !to || from === to) { return; }
+
+    if (!isValidDbIdentifier(site.dbName) || !isValidDbIdentifier(site.dbUser) || !isValidDbHost(site.dbHost)) {
+      throw new LocalDockError(
+        'Invalid database name, user, or host — refusing to build remote script.',
+        LocalDockErrorCode.DB_IMPORT_FAILED,
+        false
+      );
+    }
 
     onProgress?.('Rewriting production URLs…');
     logger.info(`[DatabaseSyncer] fixUrlsOnServer: ${from} → ${to}`);

@@ -2,6 +2,7 @@ import * as ssh2 from 'ssh2';
 import { CpanelServer } from '../models/Server';
 import { ResolvedCredentials } from '../models/Credentials';
 import { logger } from '../utils/logger';
+import { LocalDockError, LocalDockErrorCode } from '../utils/errors';
 
 export interface ExecResult {
   stdout: string;
@@ -12,6 +13,16 @@ export interface ExecResult {
 export class SshClient {
   private client: ssh2.Client = new ssh2.Client();
   private connected = false;
+  private observedFingerprint: string | undefined;
+
+  /**
+   * SHA256 fingerprint (hex) of the host key presented on the most recent
+   * connect() attempt, whether it was accepted or rejected. Undefined until
+   * a connect attempt has actually reached the key-exchange step.
+   */
+  get observedHostKeyFingerprint(): string | undefined {
+    return this.observedFingerprint;
+  }
 
   async connect(server: CpanelServer, creds: ResolvedCredentials): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -20,6 +31,17 @@ export class SshClient {
         port: server.sshPort,
         username: server.cpanelUser,
         readyTimeout: 20000,
+        hostHash: 'sha256',
+        hostVerifier: (fingerprint: string): boolean => {
+          this.observedFingerprint = fingerprint;
+          // Trust-on-first-use: nothing pinned yet for this server — accept and
+          // let the caller persist observedHostKeyFingerprint. Once pinned, any
+          // later connection must present the exact same key.
+          if (!server.hostKeyFingerprint) {
+            return true;
+          }
+          return fingerprint === server.hostKeyFingerprint;
+        },
       };
 
       if (creds.type === 'password' && creds.password) {
@@ -38,6 +60,24 @@ export class SshClient {
       });
 
       this.client.once('error', (err) => {
+        if (
+          server.hostKeyFingerprint &&
+          this.observedFingerprint &&
+          this.observedFingerprint !== server.hostKeyFingerprint
+        ) {
+          logger.error(
+            `[SshClient] Host key mismatch for ${server.host}: expected ${server.hostKeyFingerprint}, got ${this.observedFingerprint}`
+          );
+          reject(new LocalDockError(
+            `The SSH host key presented by "${server.host}" does not match the one recorded when you first connected ` +
+            `(expected ${server.hostKeyFingerprint}, got ${this.observedFingerprint}). This can mean the server was ` +
+            `legitimately reinstalled or migrated — or that this connection is being intercepted. Run "Test Connection" ` +
+            `on this server to review and accept the new key if you've verified it's legitimate.`,
+            LocalDockErrorCode.HOST_KEY_MISMATCH,
+            true
+          ));
+          return;
+        }
         logger.error(`[SshClient] Connection error: ${err.message}`);
         reject(err);
       });

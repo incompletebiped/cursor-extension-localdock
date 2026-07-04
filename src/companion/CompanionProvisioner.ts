@@ -5,7 +5,7 @@ import { SshClient } from '../api/SshClient';
 import { SftpClient } from '../api/SftpClient';
 import { WordPressSite } from '../models/Site';
 import { COMPANION_PLUGIN_FILES } from './companionPluginFiles.generated';
-import { isValidDbIdentifier } from '../utils/pathUtils';
+import { isValidDbIdentifier, isValidDbHost } from '../utils/pathUtils';
 import { LocalDockError, LocalDockErrorCode } from '../utils/errors';
 import { logger } from '../utils/logger';
 
@@ -175,6 +175,20 @@ async function fetchApiKeyFromDb(
   if (!isValidDbIdentifier(site.dbName)) {
     throw new LocalDockError(
       `Invalid database name: ${site.dbName}`,
+      LocalDockErrorCode.DB_EXPORT_FAILED,
+      false
+    );
+  }
+  if (!isValidDbIdentifier(site.dbUser)) {
+    throw new LocalDockError(
+      `Invalid database user: ${site.dbUser}`,
+      LocalDockErrorCode.DB_EXPORT_FAILED,
+      false
+    );
+  }
+  if (!isValidDbHost(site.dbHost)) {
+    throw new LocalDockError(
+      `Invalid database host: ${site.dbHost}`,
       LocalDockErrorCode.DB_EXPORT_FAILED,
       false
     );

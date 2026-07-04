@@ -8,6 +8,7 @@ import { CredentialManager } from '../auth/CredentialManager';
 import { ConfigManager } from '../utils/configManager';
 import { SiteRegistry } from '../SiteRegistry';
 import { SshClient } from '../api/SshClient';
+import { connectPinned } from '../api/sshConnect';
 import { SftpClient } from '../api/SftpClient';
 import { FileSyncer } from '../sync/FileSyncer';
 import { DatabaseSyncer } from '../sync/DatabaseSyncer';
@@ -134,7 +135,7 @@ export async function pushSite(
   };
 
   try {
-    await ssh.connect(server, creds);
+    await connectPinned(ssh, server, creds, registry);
     await sftp.open(ssh);
 
     if (token.isCancellationRequested) {

@@ -5,12 +5,14 @@ import { ConfigManager } from '../utils/configManager';
 import { DockerManager } from '../docker/DockerManager';
 import { CpanelClient, DomainEntry, WordPressFingerprint } from '../api/CpanelClient';
 import { SshClient } from '../api/SshClient';
+import { connectPinned } from '../api/sshConnect';
 import { SftpClient } from '../api/SftpClient';
 import { detectCompanionPlugin } from '../api/CompanionPluginClient';
 import { SiteTreeItem, LoadingTreeItem, EmptyTreeItem } from './SiteTreeItem';
 
 import { WordPressSite } from '../models/Site';
 import { logger } from '../utils/logger';
+import { LocalDockError, LocalDockErrorCode } from '../utils/errors';
 import { reconcileLocalState } from '../utils/siteValidation';
 import { DedupCandidate, conflictingDomains, dedupeByDocroot } from '../utils/docrootDedup';
 import { resolveEffectiveHost } from '../utils/domainRedirect';
@@ -122,14 +124,25 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
       const sftp = new SftpClient();
 
       try {
-        await ssh.connect(server, creds);
+        await connectPinned(ssh, server, creds, this.registry);
         await sftp.open(ssh);
         sshAvailable = true;
         logger.info(`[SiteTreeProvider] SSH available for ${server.host}, using SSH detection`);
       } catch (sshErr) {
-        logger.info(
-          `[SiteTreeProvider] SSH unavailable for ${server.host} (${(sshErr as Error).message}), using API-only detection`
-        );
+        // A host-key mismatch is a security-relevant failure, not ordinary SSH
+        // unavailability — surface it loudly instead of silently degrading to
+        // API-only detection, or the user would never learn their SSH
+        // connection was refused rather than merely absent.
+        if (sshErr instanceof LocalDockError && sshErr.code === LocalDockErrorCode.HOST_KEY_MISMATCH) {
+          logger.error(`[SiteTreeProvider] ${sshErr.message}`);
+          vscode.window.showWarningMessage(`LocalDock cPanel: ${sshErr.message}`, 'Show Logs').then((choice) => {
+            if (choice === 'Show Logs') { logger.show(); }
+          });
+        } else {
+          logger.info(
+            `[SiteTreeProvider] SSH unavailable for ${server.host} (${(sshErr as Error).message}), using API-only detection`
+          );
+        }
       }
 
       try {

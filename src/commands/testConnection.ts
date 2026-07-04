@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ServerTreeItem } from '../tree/ServerTreeProvider';
+import { SiteRegistry } from '../SiteRegistry';
 import { CredentialManager } from '../auth/CredentialManager';
 import { AuthProvider } from '../auth/AuthProvider';
 import { SiteTreeProvider } from '../tree/SiteTreeProvider';
@@ -7,6 +8,7 @@ import { logger } from '../utils/logger';
 
 export async function testConnection(
   item: ServerTreeItem,
+  registry: SiteRegistry,
   credManager: CredentialManager,
   authProvider: AuthProvider,
   siteTreeProvider: SiteTreeProvider
@@ -29,6 +31,13 @@ export async function testConnection(
       const result = await authProvider.testConnection(server, { ...creds, serverId: server.id });
 
       if (result.success) {
+        // First-ever successful connection to this server — pin the host key so
+        // later connections can detect if it ever changes.
+        if (!server.hostKeyFingerprint && result.hostKeyFingerprint) {
+          await registry.updateServer({ ...server, hostKeyFingerprint: result.hostKeyFingerprint });
+          logger.info(`[testConnection] Pinned SSH host key for ${server.host}`);
+        }
+
         const discover = await vscode.window.showInformationMessage(
           `Connected to ${server.host}! Discover WordPress sites now?`,
           'Discover Sites',
@@ -38,6 +47,25 @@ export async function testConnection(
           siteTreeProvider.discoverForServer(server.id);
         }
         logger.info(`[testConnection] Success: ${server.host}:${server.sshPort}`);
+      } else if (result.hostKeyMismatch) {
+        logger.warn(`[testConnection] Host key mismatch: ${server.host} — ${result.error}`);
+        const choice = await vscode.window.showWarningMessage(
+          `${result.error}`,
+          { modal: true },
+          'Trust New Key & Retry',
+          'Cancel'
+        );
+        if (choice === 'Trust New Key & Retry' && result.hostKeyFingerprint) {
+          const updated = { ...server, hostKeyFingerprint: result.hostKeyFingerprint };
+          await registry.updateServer(updated);
+          const retry = await authProvider.testConnection(updated, { ...creds, serverId: server.id });
+          if (retry.success) {
+            vscode.window.showInformationMessage(`New host key trusted — connected to ${server.host}.`);
+            logger.info(`[testConnection] New host key trusted and connection succeeded: ${server.host}`);
+          } else {
+            vscode.window.showErrorMessage(`Still could not connect to ${server.host}: ${retry.error ?? 'unknown error'}`);
+          }
+        }
       } else {
         const isRefused = (result.error ?? '').includes('ECONNREFUSED');
         const hint = isRefused

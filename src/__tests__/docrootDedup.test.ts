@@ -56,17 +56,17 @@ describe('dedupeByDocroot', () => {
   });
 
   it('drops the redirecting domain in a shared docroot (the reported bug)', () => {
-    // critandclatter.com is pointed at critandclattergames.com's folder for email;
-    // it redirects off-host, so the games site should win.
+    // example-mail.com is pointed at example-shop.com's folder for email;
+    // it redirects off-host, so the shop site should win.
     const cands = [
-      c('critandclatter.com', '/home/u/public_html/critandclattergames.com'),
-      c('critandclattergames.com', '/home/u/public_html/critandclattergames.com'),
+      c('example-mail.com', '/home/u/public_html/example-shop.com'),
+      c('example-shop.com', '/home/u/public_html/example-shop.com'),
     ];
     const hosts = new Map<string, string | null>([
-      ['critandclatter.com', 'critandclattergames.com'],
-      ['critandclattergames.com', 'critandclattergames.com'],
+      ['example-mail.com', 'example-shop.com'],
+      ['example-shop.com', 'example-shop.com'],
     ]);
-    expect(dedupeByDocroot(cands, hosts)).toEqual(new Set(['critandclattergames.com']));
+    expect(dedupeByDocroot(cands, hosts)).toEqual(new Set(['example-shop.com']));
   });
 
   it('prefers the self-serving domain even without folder-name hints', () => {
@@ -83,15 +83,15 @@ describe('dedupeByDocroot', () => {
 
   it('falls back to folder-name match when the probe is inconclusive', () => {
     const cands = [
-      c('critandclatter.com', '/home/u/public_html/critandclattergames.com'),
-      c('critandclattergames.com', '/home/u/public_html/critandclattergames.com'),
+      c('example-mail.com', '/home/u/public_html/example-shop.com'),
+      c('example-shop.com', '/home/u/public_html/example-shop.com'),
     ];
     // Both probes failed (null) — the folder is named after the games domain.
     const hosts = new Map<string, string | null>([
-      ['critandclatter.com', null],
-      ['critandclattergames.com', null],
+      ['example-mail.com', null],
+      ['example-shop.com', null],
     ]);
-    expect(dedupeByDocroot(cands, hosts)).toEqual(new Set(['critandclattergames.com']));
+    expect(dedupeByDocroot(cands, hosts)).toEqual(new Set(['example-shop.com']));
   });
 
   it('prefers the main domain over an addon on a tie', () => {

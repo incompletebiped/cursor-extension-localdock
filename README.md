@@ -133,7 +133,9 @@ All settings live under `localdockCpanel.*`:
 - WordPress database passwords are also stored in `SecretStorage` — stripped from the site registry before it is persisted to disk.
 - `mysqldump` / `mysql` commands pass credentials via the `MYSQL_PWD` environment variable, not as CLI flags, so they do not appear in shell history or process listings.
 - TLS certificate validation is **on by default** for all cPanel HTTPS API connections.
+- SSH host keys are pinned on trust-on-first-use: the first successful connection to a server records its host key fingerprint (SHA256), and every later connection must present the same key. A mismatch refuses the connection instead of silently proceeding — run **Test Connection** on that server to review it and explicitly trust the new key if you've verified the change is legitimate (e.g. the server was migrated).
 - Remote temp files (SQL dumps, PHP scripts) are always deleted in `finally` blocks.
+- Database credentials (`DB_HOST`, `DB_USER`, `DB_NAME`) read from a site's `wp-config.php` are validated against a strict allow-list before ever being used in a shell command, since they originate from a file inside the WordPress webroot.
 
 ---
 

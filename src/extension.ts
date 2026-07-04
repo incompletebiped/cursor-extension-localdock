@@ -97,7 +97,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ),
 
     vscode.commands.registerCommand('localdockCpanel.testConnection', (item: ServerTreeItem) =>
-      testConnection(item, credManager, authProvider, siteTreeProvider)
+      testConnection(item, registry, credManager, authProvider, siteTreeProvider)
     ),
 
     vscode.commands.registerCommand('localdockCpanel.editServer', (item: ServerTreeItem) =>
