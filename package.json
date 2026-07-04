@@ -249,6 +249,11 @@
           "group": "sync@2"
         },
         {
+          "command": "localdockCpanel.pushSite",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /pullState_ready/",
+          "group": "inline"
+        },
+        {
           "command": "localdockCpanel.diffSite",
           "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "sync@3"
@@ -262,6 +267,11 @@
           "command": "localdockCpanel.provisionCompanionPlugin",
           "when": "view == localdockCpanel.siteTree && viewItem =~ /wordpressSite/",
           "group": "companion@1"
+        },
+        {
+          "command": "localdockCpanel.provisionCompanionPlugin",
+          "when": "view == localdockCpanel.siteTree && viewItem =~ /companion_(not_installed|inactive|unknown)/",
+          "group": "inline"
         },
         {
           "command": "localdockCpanel.checkCompanionDrift",

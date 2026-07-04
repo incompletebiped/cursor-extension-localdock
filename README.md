@@ -49,6 +49,13 @@ A Cursor / VS Code extension that replicates the [LocalWP](https://localwp.com/)
 - Exports local MySQL DB, imports on remote, rewrites localhost URLs to production (PHP serialize-safe — preserves Astra/Elementor byte counts)
 - Remote directories created automatically before upload
 
+**How deletions are actually handled:**
+- **A file you pulled, then deleted locally, *is* deleted on the remote when you push.** The diff compares your local folder against the manifest recorded at your last pull — anything the manifest knows about that's now missing from disk shows up as "will be deleted" in the push confirmation list, and is removed from the server via SFTP once you confirm.
+- **A file that only ever existed on the remote (never pulled locally) is untouched by push either way.** The diff only knows about files it has seen locally, so something that exists solely on the server — added directly there, or uploaded out-of-band like the Companion Plugin's own files right after provisioning — can't appear as "deleted" no matter what your local folder looks like. It shows up locally the next time you actually pull, not before.
+- **The database is never diffed — every push fully overwrites the remote database with your local one.** Local MySQL is dumped in full and imported over the remote database as-is, with no selective sync. This is why a database-only change (e.g. deactivating a plugin, which flips the `active_plugins` option) shows up remotely after a push even though no *file* changed — and, more importantly, why pushing after the remote database changed since your last pull silently overwrites those remote changes with your local snapshot. There's no confirmation step for this beyond the generic "database will be exported and pushed" line in the confirmation dialog; run **Check for Changes (Companion Plugin)** first if you need to know whether the remote DB has drifted since your last pull.
+
+> **Deleting a plugin from your local site's wp-admin and getting an FTP-credentials prompt?** That's WordPress itself, running inside your local Docker container, failing its own filesystem-permission check before it'll delete a plugin folder — it has nothing to do with LocalDock's connection to your cPanel server. Delete the plugin's folder directly in your local site directory instead (Explorer / VS Code) and push as usual — it'll be picked up by the file-deletion diff described above.
+
 ### Local Docker Environment
 - WordPress + MySQL 8 stack via Docker Compose, one environment per site
 - Unique port assigned per site (default starts at 8080)
@@ -95,7 +102,7 @@ LOCALDOCK CPANEL
     └── mysite.org     ◼ Stopped
 ```
 
-Hover a site for its full status, including Companion Plugin state (active/inactive/not installed) and API key validity. Right-click a pulled site for **Provision Companion Plugin** / **Check for Changes (Companion Plugin)**. Start Local and its inline sidebar button stay disabled until a site has actually been pulled — a single `getPullBucket()` check (`needed` / `busy` / `ready`) drives both the button visibility and the command's own guard, so they can't disagree.
+Hover a site for its full status, including Companion Plugin state (active/inactive/not installed) and API key validity. A site not yet pulled shows an inline **Pull** icon; once it's been pulled, that becomes an inline **Push** icon so uploading back doesn't require a right-click either. A site without an active Companion Plugin shows a one-click **Provision Companion Plugin** icon inline in the sidebar row too. Right-click any site for the full command set (Pull, Push, Show Changed Files, Check Remote for Changes, Provision/Check Companion Plugin). Start Local and its inline sidebar button stay disabled until a site has actually been pulled — a single `getPullBucket()` check (`needed` / `busy` / `ready`) drives the Pull/Push/Start Local button visibility and each command's own guard, so they can't disagree.
 
 ---
 
@@ -135,12 +142,13 @@ All settings live under `localdockCpanel.*`:
 | Area | Status |
 |---|---|
 | WP-CLI sync method | The `wpcli` setting option is not yet implemented. Only `mysqldump` works. |
-| Conflict detection | If a file is edited on the server after you pulled, push overwrites it without warning. |
+| File conflict detection | If a file is edited on the server after you pulled, push overwrites it without warning. |
+| Database push is a full overwrite | Push doesn't diff the database — it replaces the entire remote database with your local dump on every push. If the remote DB changed since your last pull (e.g. a live edit, an order, a comment), pushing silently discards it. Check for drift with **Check for Changes (Companion Plugin)** before pushing if that matters. |
 | Push without prior pull | A site must be pulled before it can be pushed. |
 | Windows PATH (MySQL) | If `mysql`/`mysqldump` are not on your system PATH (common with XAMPP/WAMP), DB sync will fail. Add your MySQL `bin` directory to PATH. |
 | Marketplace | Not yet published to the VS Code Marketplace. Install via `.vsix` from Releases. |
 | Companion plugin distribution | Not on WP.org — provisioned by LocalDock itself or installed manually from `wordpress-plugin/localdock-companion/`. Untested against a real WordPress install so far. |
-| Companion plugin automatic activation | Requires `wp-cli` on the server's PATH. Without it, the plugin uploads but you activate it manually in wp-admin, then re-run the provision/check command to pick up the key. |
+| Companion plugin automatic activation | Tries `wp-cli` first, then falls back to a direct PHP CLI activation if `wp-cli` isn't reachable over SSH. If both fail (e.g. PHP CLI itself unavailable), the plugin uploads but stays inactive until you activate it manually in wp-admin, then re-run "Provision Companion Plugin" to pick up the key. |
 | Companion plugin coverage | Only catches changes made through WordPress itself (hooks like `save_post`, `updated_option`). Files edited directly via SFTP/FTP outside WordPress aren't detected yet. |
 
 ---
