@@ -78,7 +78,9 @@
       "Bash(where cursor *)",
       "Bash(where npm *)",
       "Read(//d/KillianDNS/**)",
-      "Read(//d/KillianDNS/demo.baileykillian.com/**)"
+      "Read(//d/KillianDNS/demo.baileykillian.com/**)",
+      "Bash(npx vitest *)",
+      "Bash(\"/c/Users/baile/AppData/Local/Programs/cursor/resources/app/bin/cursor\" --install-extension \"D:\\\\Git_Vault\\\\cursor-extension-localdock\\\\localdock-cpanel-0.1.13.vsix\" --force)"
     ]
   }
 }

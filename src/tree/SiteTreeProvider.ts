@@ -3,7 +3,7 @@ import { SiteRegistry } from '../SiteRegistry';
 import { CredentialManager } from '../auth/CredentialManager';
 import { ConfigManager } from '../utils/configManager';
 import { DockerManager } from '../docker/DockerManager';
-import { CpanelClient } from '../api/CpanelClient';
+import { CpanelClient, DomainEntry, WordPressFingerprint } from '../api/CpanelClient';
 import { SshClient } from '../api/SshClient';
 import { SftpClient } from '../api/SftpClient';
 import { detectCompanionPlugin } from '../api/CompanionPluginClient';
@@ -12,6 +12,8 @@ import { SiteTreeItem, LoadingTreeItem, EmptyTreeItem } from './SiteTreeItem';
 import { WordPressSite } from '../models/Site';
 import { logger } from '../utils/logger';
 import { reconcileLocalState } from '../utils/siteValidation';
+import { DedupCandidate, conflictingDomains, dedupeByDocroot } from '../utils/docrootDedup';
+import { resolveEffectiveHost } from '../utils/domainRedirect';
 
 type SiteNode = SiteTreeItem | LoadingTreeItem | EmptyTreeItem;
 
@@ -131,26 +133,62 @@ export class SiteTreeProvider implements vscode.TreeDataProvider<SiteNode> {
       }
 
       try {
-        const sitePromises = domains.map(async (domain) => {
-          let wp = null;
+        // Pass 1: detect WordPress on every domain.
+        const detections = await Promise.all(
+          domains.map(async (domain) => {
+            let wp = null;
 
-          if (sshAvailable) {
-            wp = await cpanel.detectWordPress(sftp, ssh, domain).catch((err: Error) => {
-              logger.warn(`[SiteTreeProvider] SSH detection failed for ${domain.domain}: ${err.message}`);
-              return null;
-            });
-          }
+            if (sshAvailable) {
+              wp = await cpanel.detectWordPress(sftp, ssh, domain).catch((err: Error) => {
+                logger.warn(`[SiteTreeProvider] SSH detection failed for ${domain.domain}: ${err.message}`);
+                return null;
+              });
+            }
 
-          // Fall back to API detection if SSH didn't work
-          if (!wp) {
-            wp = await cpanel.detectWordPressViaApi(domain).catch((err: Error) => {
-              logger.warn(`[SiteTreeProvider] API detection failed for ${domain.domain}: ${err.message}`);
-              return null;
-            });
-          }
+            // Fall back to API detection if SSH didn't work
+            if (!wp) {
+              wp = await cpanel.detectWordPressViaApi(domain).catch((err: Error) => {
+                logger.warn(`[SiteTreeProvider] API detection failed for ${domain.domain}: ${err.message}`);
+                return null;
+              });
+            }
 
-          if (!wp) { return null; }
+            return wp ? { domain, wp } : null;
+          })
+        );
+        const candidates = detections.filter(
+          (d): d is { domain: DomainEntry; wp: WordPressFingerprint } => d !== null
+        );
 
+        // Dedupe domains that share a docroot: an email/redirect-only domain
+        // pointed at another site's folder in cPanel sees the same wp-config.php
+        // and would otherwise be listed as a duplicate of the real site. Probe
+        // only the conflicting domains over HTTP to find which actually serves
+        // the site (the others redirect off-host), then keep one per docroot.
+        const dedupCandidates: DedupCandidate[] = candidates.map((c) => ({
+          domain: c.domain.domain,
+          docroot: c.domain.docroot,
+          type: c.domain.type,
+        }));
+        const effectiveHosts = new Map<string, string | null>();
+        await Promise.all(
+          conflictingDomains(dedupCandidates).map(async (d) => {
+            effectiveHosts.set(d, await resolveEffectiveHost(d, this.configManager.rejectUnauthorizedSsl));
+          })
+        );
+        const keep = dedupeByDocroot(dedupCandidates, effectiveHosts);
+        const kept = candidates.filter((c) => keep.has(c.domain.domain));
+        if (kept.length < candidates.length) {
+          const dropped = candidates
+            .filter((c) => !keep.has(c.domain.domain))
+            .map((c) => c.domain.domain);
+          logger.info(
+            `[SiteTreeProvider] Skipped ${dropped.length} domain(s) sharing a docroot with another site: ${dropped.join(', ')}`
+          );
+        }
+
+        // Pass 2: build a site entry for each surviving domain.
+        const sitePromises = kept.map(async ({ domain, wp }) => {
           const companionPlugin = await detectCompanionPlugin(
             domain.domain,
             domain.docroot,
