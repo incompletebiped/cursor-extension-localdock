@@ -65,8 +65,9 @@ class LocalDock_REST_API {
 
 		return rest_ensure_response(
 			array(
-				'server_time' => time(),
-				'changes'     => $rows,
+				'server_time'    => time(),
+				'plugin_version' => LOCALDOCK_COMPANION_VERSION,
+				'changes'        => $rows,
 			)
 		);
 	}

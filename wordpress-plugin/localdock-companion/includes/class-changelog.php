@@ -115,7 +115,28 @@ class LocalDock_Changelog {
 	}
 
 	public static function log_updated_option( $option ) {
+		if ( self::is_ignored_option( $option ) ) {
+			return;
+		}
 		self::record( 'option', null, 'updated:' . $option );
+	}
+
+	/**
+	 * WP-Cron rewrites 'cron' and toggles '_transient_doing_cron' on essentially
+	 * every request, and transients in general are WordPress's own ephemeral
+	 * cache plumbing — none of that is a real site change worth surfacing as drift.
+	 */
+	private static function is_ignored_option( $option ) {
+		$ignored = apply_filters(
+			'localdock_companion_ignored_options',
+			array( 'cron', 'rewrite_rules' )
+		);
+
+		if ( in_array( $option, $ignored, true ) ) {
+			return true;
+		}
+
+		return 0 === strpos( $option, '_transient_' ) || 0 === strpos( $option, '_site_transient_' );
 	}
 
 	public static function log_activated_plugin( $plugin ) {

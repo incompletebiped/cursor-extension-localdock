@@ -75,7 +75,7 @@ export interface CompanionChangeRow {
 }
 
 export type CompanionChangesResult =
-  | { ok: true; changes: CompanionChangeRow[]; serverTime: number }
+  | { ok: true; changes: CompanionChangeRow[]; serverTime: number; pluginVersion?: string }
   | { ok: false; reason: 'unauthorized' | 'not_found' | 'network' | 'unexpected'; status: number | null; message: string };
 
 /**
@@ -105,8 +105,17 @@ export async function fetchCompanionChanges(
     });
 
     if (response.status === 200) {
-      const data = response.data as { server_time?: number; changes?: CompanionChangeRow[] };
-      return { ok: true, changes: data.changes ?? [], serverTime: data.server_time ?? Date.now() / 1000 };
+      const data = response.data as {
+        server_time?: number;
+        plugin_version?: string;
+        changes?: CompanionChangeRow[];
+      };
+      return {
+        ok: true,
+        changes: data.changes ?? [],
+        serverTime: data.server_time ?? Date.now() / 1000,
+        pluginVersion: data.plugin_version,
+      };
     }
     if (response.status === 401 || response.status === 403) {
       return { ok: false, reason: 'unauthorized', status: response.status, message: 'API key was rejected' };

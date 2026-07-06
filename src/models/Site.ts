@@ -19,5 +19,7 @@ export interface WordPressSite {
   companionPlugin?: CompanionPluginStatus;
   /** Whether the API key stored in SecretStorage for this site still authenticates. Undefined = never provisioned. */
   companionKeyStatus?: CompanionKeyStatus;
+  /** Companion plugin version last reported by the remote site's REST API. Undefined = never checked. */
+  companionVersion?: string;
   detectedAt: string;
 }

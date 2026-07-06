@@ -6,6 +6,8 @@ import { SiteTreeProvider } from '../tree/SiteTreeProvider';
 import { ConfigManager } from '../utils/configManager';
 import { fetchCompanionChanges } from '../api/CompanionPluginClient';
 import { handleError } from '../utils/errors';
+import { compareVersions } from '../utils/semver';
+import { COMPANION_PLUGIN_VERSION } from '../companion/companionPluginFiles.generated';
 
 function formatTimestamp(mysqlUtc: string): string {
   // MySQL DATETIME has no timezone marker; the plugin writes it in UTC (current_time('mysql', true)).
@@ -70,10 +72,37 @@ export async function checkCompanionDrift(
       return;
     }
 
-    if (site.companionKeyStatus !== 'valid' || site.companionPlugin !== 'active') {
-      const refreshed = { ...site, companionPlugin: 'active' as const, companionKeyStatus: 'valid' as const };
+    const remoteVersion = result.pluginVersion;
+    // A remote plugin predating this field (added in v0.1.2) never reports a
+    // version at all — that omission itself means it's outdated, since every
+    // version that can report one is >= 0.1.2.
+    const isOutdated = remoteVersion === undefined || compareVersions(remoteVersion, COMPANION_PLUGIN_VERSION) < 0;
+
+    if (
+      site.companionKeyStatus !== 'valid' ||
+      site.companionPlugin !== 'active' ||
+      site.companionVersion !== remoteVersion
+    ) {
+      const refreshed = {
+        ...site,
+        companionPlugin: 'active' as const,
+        companionKeyStatus: 'valid' as const,
+        companionVersion: remoteVersion,
+      };
       await registry.updateSite(refreshed);
       await siteTreeProvider.updateSiteState(refreshed);
+    }
+
+    if (isOutdated) {
+      const versionLabel = remoteVersion ? `v${remoteVersion}` : 'an older version';
+      const choice = await vscode.window.showInformationMessage(
+        `LocalDock Companion on "${site.domain}" is running ${versionLabel} — the bundled version is v${COMPANION_PLUGIN_VERSION}. Re-provision to update?`,
+        'Provision Now'
+      );
+      if (choice === 'Provision Now') {
+        vscode.commands.executeCommand('localdockCpanel.provisionCompanionPlugin', item);
+        return;
+      }
     }
 
     const pulledLabel = site.syncState.lastPulledAt

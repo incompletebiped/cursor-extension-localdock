@@ -4,6 +4,8 @@ import { SyncStatus } from '../models/SyncState';
 import { LocalEnvStatus } from '../models/LocalEnvState';
 import { CompanionPluginStatus, CompanionKeyStatus } from '../models/CompanionPlugin';
 import { getPullBucket } from '../utils/siteStatus';
+import { compareVersions } from '../utils/semver';
+import { COMPANION_PLUGIN_VERSION } from '../companion/companionPluginFiles.generated';
 
 // ServerTreeItem lives in ServerTreeProvider.ts — re-export for backwards compat
 export { ServerTreeItem } from './ServerTreeProvider';
@@ -157,8 +159,16 @@ function buildTooltip(site: WordPressSite): string {
   lines.push(`Companion Plugin: ${companionPluginLabel(site.companionPlugin)}`);
   if (site.companionPlugin === 'active') {
     lines.push(`Companion Key: ${companionKeyLabel(site.companionKeyStatus)}`);
+    lines.push(`Companion Version: ${companionVersionLabel(site.companionVersion)}`);
   }
   return lines.join('\n');
+}
+
+function companionVersionLabel(version: string | undefined): string {
+  if (!version) {
+    return '? Unknown';
+  }
+  return compareVersions(version, COMPANION_PLUGIN_VERSION) < 0 ? `v${version} — update available` : `v${version}`;
 }
 
 function companionPluginLabel(status: CompanionPluginStatus | undefined): string {

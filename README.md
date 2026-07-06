@@ -125,6 +125,8 @@ All settings live under `localdockCpanel.*`:
 | `maxConcurrentTransfers` | `20` | Parallel SFTP file transfers (pipelined over one SSH connection, not one per file — lower it if a host rate-limits SFTP activity) |
 | `dockerStartPort` | `8080` | First port checked when assigning a local environment |
 
+If a pull/push feels slow on a site with lots of small files (plugins, themes, uploads), raise `localdockCpanel.maxConcurrentTransfers` in Cursor/VS Code settings — per-file round-trip latency, not bandwidth, dominates on those sites, and this setting is what hides it. It's safe to go well above the default of 20 since transfers are pipelined over one SSH connection rather than opened per file; only lower it if the host starts rate-limiting SFTP.
+
 ---
 
 ## Security
