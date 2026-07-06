@@ -39,31 +39,41 @@
 - `mkdir` reliability fix — checks for an existing remote directory via `stat` instead of relying on ssh2's ambiguous EEXIST-equivalent status code
 - Activity panel progress updates throttled (150ms) so percentages no longer jump erratically under high transfer concurrency
 
+### Shipped in v0.1.9–v0.1.13 — SSH hardening, site-discovery cleanup, Companion field-testing
+- New SSH layer (`SshClient.ts` + `sshConnect.ts`) with a **Test Connection** command; SSH host keys pinned trust-on-first-use (SHA256 fingerprint, mismatch refuses the connection)
+- Shared-docroot dedup in site discovery — domains pointed at another site's folder (e.g. an email-only domain) no longer show up as duplicate WordPress sites
+- ESLint 9 flat config + a vitest unit test suite formalized (40 tests: `pathUtils`, `docrootDedup`, `DatabaseSyncer`, `semver`)
+- **First real-world Companion Plugin validation**, against a live site (demo.baileykillian.com) — surfaced and fixed a genuine bug: WP-Cron's own housekeeping (`cron` option, `_transient_doing_cron`) was being logged as "drift" on every cron tick, drowning out real changes. Now filtered at the source (`is_ignored_option`, filterable via `localdock_companion_ignored_options`)
+- **Companion Plugin version reporting + update detection** — the REST endpoint now reports its installed version; `checkCompanionDrift` compares it against the bundled version and prompts to re-provision when the site is running an outdated copy, surfaced in the sidebar tooltip too
+
 ---
 
 ## v0.2 — WP-CLI + Developer Tools + Companion Hardening
 
 - **WP-CLI terminal** — run `wp <args>` inside the Docker container from a VS Code terminal
 - **PHP version switching** — pick `wordpress:php8.1-apache` / `php8.2` etc. and rebuild in place
-- **Xdebug support** — optional toggle that layers a custom Docker image with Xdebug pre-wired to VS Code's PHP Debug extension
-- **Companion plugin real-world testing** — validate against a live WordPress install; package a proper distribution zip (WP.org-style listing later)
+- **Companion plugin real-world testing** — ✅ started in v0.1.13 (demo.baileykillian.com, cron-noise bug found + fixed); still need a few more live sites to shake out edge cases before calling this done, plus packaging a proper distribution zip (WP.org-style listing later)
 - **Companion plugin file-level change detection** — on-demand server-side mtime/checksum sweep of `wp-content` for edits made directly via SFTP/FTP, which WP hooks can't see
-- **Local git-history** — auto-commit into a local git repo after every pull, so LocalDock tracks what *you've* changed locally, complementing the Companion plugin's record of what changed on the origin site
 
 ---
 
-## v0.3 — Import / Export / Blueprints
+## v0.3 — Multi-Site Operations + WooCommerce Safety
+
+- **Multi-server batch operations** — promoted from Icebox. Bulk actions across all sites in one go, especially bulk "Check for Changes" (Companion drift) so managing 20+ sites doesn't mean clicking through them one at a time
+- **WooCommerce-aware URL rewrite** — promoted from Icebox. Detect and correctly rewrite serialized cart/order/product metadata during pull/push — 2 live WooCommerce sites have never been tested through the local-Docker flow yet, so this is a real, current risk, not a hypothetical one
+
+---
+
+## v0.4 — Import / Export
 
 - **Site import from zip/backup** — unzip a cPanel full backup or a WP export into `localPath`, import DB, start local
-- **Blueprints** — save any pulled site as a reusable starting template (zero-config WooCommerce, Astra starter, etc.)
 - **One-click staging push** — push directly to a staging subdomain instead of production, with automatic URL rewriting
 
 ---
 
-## v0.4 — Advanced Local Networking
+## v0.5 — Advanced Local Networking
 
 - **Local SSL** — `mkcert`-generated cert + nginx reverse proxy so `https://sitename.localhost` works
-- **Live share / tunnel** — expose the local site via Cloudflare Tunnel or ngrok, shareable URL in the activity bar
 
 ---
 
@@ -71,7 +81,16 @@
 
 | Feature | Notes |
 |---|---|
-| Multi-server batch operations | Pull/push multiple sites across servers in one action |
-| VSCode.dev / remote container support | Run the extension fully in-browser or inside a Dev Container |
-| Plesk / DirectAdmin support | Extend beyond cPanel to other control panels |
-| WooCommerce-aware URL rewrite | Detect and rewrite serialized cart/order metadata |
+| Xdebug support | Real idea, not confident it's needed yet — revisit if PHP debugging becomes a real bottleneck |
+| Local git-history | Real idea (auto-commit local folder after each pull for a revertable timeline), not confident it's needed yet |
+
+---
+
+## Considered and cut
+
+| Feature | Why cut |
+|---|---|
+| Blueprints | Tool's whole model is syncing *existing* production sites, not scaffolding new ones from templates |
+| Plesk / DirectAdmin support | Contradicts the product's own identity — it's "LocalDock **for cPanel**," not a generic panel tool |
+| Live share / tunnel | Not needed |
+| VSCode.dev / remote container support | Doesn't fit the actual workflow (local Docker + local MySQL + SSH) — niche, no real use case here |
