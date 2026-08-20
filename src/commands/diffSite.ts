@@ -2,15 +2,21 @@ import * as vscode from 'vscode';
 import { SiteTreeItem } from '../tree/SiteTreeItem';
 import { SiteTreeProvider } from '../tree/SiteTreeProvider';
 import { ConfigManager } from '../utils/configManager';
+import { CredentialManager } from '../auth/CredentialManager';
+import { DockerManager } from '../docker/DockerManager';
 import { DiffEngine } from '../sync/DiffEngine';
+import { planDatabasePush } from '../sync/ChangelogPushPlanner';
 import { readManifest } from '../sync/Manifest';
 import { WordPressSite } from '../models/Site';
 import { handleError } from '../utils/errors';
+import { logger } from '../utils/logger';
 
 export async function diffSite(
   item: SiteTreeItem,
   treeProvider: SiteTreeProvider,
-  configManager: ConfigManager
+  configManager: ConfigManager,
+  credManager: CredentialManager,
+  dockerManager: DockerManager
 ): Promise<void> {
   const site = item.site;
 
@@ -37,7 +43,28 @@ export async function diffSite(
       configManager.pushExcludePatterns
     );
 
-    if (!engine.hasChanges(diff)) {
+    // Read-only equivalent of what pushSite would compute — same "since"
+    // cursor, same Companion changelog — just without the confirmation
+    // dialog or any actual mutation, so this is safe to run any time.
+    let dbSummary: string | null = null;
+    try {
+      const localApiKey = await credManager.getCompanionKeyLocal(site.id);
+      if (localApiKey && manifest.localPort && (await dockerManager.getStatus(site.localPath)) === 'running') {
+        const dbPlan = await planDatabasePush(
+          `http://localhost:${manifest.localPort}`,
+          localApiKey,
+          site.syncState.lastPushedAt ?? site.syncState.lastPulledAt
+        );
+        if (dbPlan && !dbPlan.isEmpty) {
+          dbSummary = dbPlan.summary;
+        }
+      }
+    } catch (err) {
+      // Purely informational — never block the file diff view over this.
+      logger.warn(`[diffSite] Database status check failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    if (!engine.hasChanges(diff) && !dbSummary) {
       vscode.window.showInformationMessage(`"${site.domain}" has no local changes.`);
       return;
     }
@@ -55,6 +82,13 @@ export async function diffSite(
 
     // Show results in quick pick for easy browsing
     const items: vscode.QuickPickItem[] = [];
+
+    if (dbSummary) {
+      items.push(
+        { label: '$(database) Database', kind: vscode.QuickPickItemKind.Separator },
+        { label: `$(database) ${dbSummary}`, description: 'since last sync — via Companion Plugin' }
+      );
+    }
 
     if (diff.added.length > 0) {
       items.push({
@@ -86,8 +120,11 @@ export async function diffSite(
       );
     }
 
+    const fileSummary = engine.hasChanges(diff) ? engine.formatSummary(diff) : null;
+    const titleSummary = [fileSummary, dbSummary].filter(Boolean).join(' · ');
+
     await vscode.window.showQuickPick(items, {
-      title: `Changes in ${site.domain} — ${engine.formatSummary(diff)}`,
+      title: `Changes in ${site.domain} — ${titleSummary}`,
       placeHolder: 'Local changes (read-only view)',
       canPickMany: false,
     });

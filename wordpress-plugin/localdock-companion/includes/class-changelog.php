@@ -16,7 +16,9 @@ class LocalDock_Changelog {
 	public static function init() {
 		add_action( 'save_post', array( __CLASS__, 'log_save_post' ), 10, 2 );
 		add_action( 'deleted_post', array( __CLASS__, 'log_deleted_post' ) );
+		add_action( 'added_option', array( __CLASS__, 'log_added_option' ) );
 		add_action( 'updated_option', array( __CLASS__, 'log_updated_option' ) );
+		add_action( 'deleted_option', array( __CLASS__, 'log_deleted_option' ) );
 		add_action( 'activated_plugin', array( __CLASS__, 'log_activated_plugin' ) );
 		add_action( 'deactivated_plugin', array( __CLASS__, 'log_deactivated_plugin' ) );
 		add_action( 'switch_theme', array( __CLASS__, 'log_switch_theme' ) );
@@ -114,11 +116,25 @@ class LocalDock_Changelog {
 		self::record( 'post', $post_id, 'deleted' );
 	}
 
+	public static function log_added_option( $option ) {
+		if ( self::is_ignored_option( $option ) ) {
+			return;
+		}
+		self::record( 'option', null, 'added:' . $option );
+	}
+
 	public static function log_updated_option( $option ) {
 		if ( self::is_ignored_option( $option ) ) {
 			return;
 		}
 		self::record( 'option', null, 'updated:' . $option );
+	}
+
+	public static function log_deleted_option( $option ) {
+		if ( self::is_ignored_option( $option ) ) {
+			return;
+		}
+		self::record( 'option', null, 'deleted:' . $option );
 	}
 
 	/**

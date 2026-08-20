@@ -87,10 +87,17 @@ export class ConfigManager {
       '.DS_Store',
       'node_modules/**',
       '.localdock/**',
+      // IDE/agent workspace config — created locally the moment the site
+      // folder is opened as a workspace, never came from the remote, and
+      // must never reach production
+      '.claude/**',
+      '.cursor/**',
+      '.vscode/**',
       // Local-only files written by this extension
       'wp-content/uploads/.htaccess',
       'wp-content/mu-plugins/localdock-mail.php',
       'wp-content/mu-plugins/localdock-dev-env.php',
+      'wp-content/plugins/localdock-companion/**',
       'wp-content/object-cache.php',
       'wp-content/db.php',
       // Plugin-generated CSS caches — regenerate from DB on production, no need to push
@@ -102,6 +109,16 @@ export class ConfigManager {
 
   get databaseSyncMethod(): 'mysqldump' | 'wpcli' {
     return this.config.get<'mysqldump' | 'wpcli'>('databaseSyncMethod', 'mysqldump');
+  }
+
+  /**
+   * Force the old full mysqldump-and-replace behavior on every push instead
+   * of the changelog-driven incremental push. Useful for troubleshooting, or
+   * to deliberately promote the entire local database state (including
+   * active theme/plugins) to production.
+   */
+  get fullDatabasePush(): boolean {
+    return this.config.get<boolean>('fullDatabasePush', false);
   }
 
   get maxConcurrentTransfers(): number {

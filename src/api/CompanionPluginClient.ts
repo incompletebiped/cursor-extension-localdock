@@ -90,13 +90,27 @@ export async function fetchCompanionChanges(
   sinceIso: string | undefined,
   rejectUnauthorizedSsl: boolean
 ): Promise<CompanionChangesResult> {
+  return fetchCompanionChangesAt(`https://${domain}`, apiKey, sinceIso, rejectUnauthorizedSsl);
+}
+
+/**
+ * Same as {@link fetchCompanionChanges}, but against an arbitrary base URL —
+ * used for the local Docker companion instance (`http://localhost:<port>`)
+ * as well as the remote one.
+ */
+export async function fetchCompanionChangesAt(
+  baseUrl: string,
+  apiKey: string,
+  sinceIso: string | undefined,
+  rejectUnauthorizedSsl: boolean
+): Promise<CompanionChangesResult> {
   try {
     const params: Record<string, string> = {};
     if (sinceIso) {
       params.since = String(Math.floor(new Date(sinceIso).getTime() / 1000));
     }
 
-    const response = await axios.get(`https://${domain}${REST_ROUTE_PATH}`, {
+    const response = await axios.get(`${baseUrl}${REST_ROUTE_PATH}`, {
       headers: { 'X-LocalDock-Key': apiKey },
       params,
       httpsAgent: new https.Agent({ rejectUnauthorized: rejectUnauthorizedSsl }),

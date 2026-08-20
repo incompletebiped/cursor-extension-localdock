@@ -219,6 +219,36 @@ export class DockerManager {
     return result.stdout;
   }
 
+  /**
+   * Run a command inside one of the site's Docker Compose service containers
+   * (e.g. 'wordpress' for the PHP CLI, 'db' for the mysql CLI) and return its
+   * output. Used for local Companion plugin provisioning/queries, which need
+   * to reach the containers directly since the `db` service isn't exposed on
+   * a host port.
+   */
+  async execInService(
+    localPath: string,
+    service: string,
+    args: string[]
+  ): Promise<{ code: number; stdout: string; stderr: string }> {
+    return this.spawnCompose(['exec', '-T', service, ...args], localPath);
+  }
+
+  /**
+   * Same as execInService(), but pipes `input` to the process's stdin — used
+   * to feed a SQL script to `mysql` inside the `db` container without shell
+   * redirection (which spawn() can't do) or a bind mount (the `db` service
+   * only has db.sql mounted, not the rest of .localdock/).
+   */
+  async execInServiceWithInput(
+    localPath: string,
+    service: string,
+    args: string[],
+    input: string
+  ): Promise<{ code: number; stdout: string; stderr: string }> {
+    return this.spawnCompose(['exec', '-T', service, ...args], localPath, input);
+  }
+
   /** Get the current status of the Docker Compose stack */
   async getStatus(localPath: string): Promise<LocalEnvStatus> {
     const composePath = path.join(localPath, '.localdock', 'docker-compose.yml');
@@ -751,7 +781,8 @@ volumes:
    */
   private spawnCompose(
     args: string[],
-    localPath: string | null
+    localPath: string | null,
+    stdin?: string
   ): Promise<{ code: number; stdout: string; stderr: string }> {
     return new Promise((resolve) => {
       let command: string;
@@ -772,6 +803,10 @@ volumes:
         windowsHide: true,
         env: { ...process.env },
       });
+
+      if (stdin !== undefined) {
+        proc.stdin.end(stdin, 'utf-8');
+      }
 
       let stdout = '';
       let stderr = '';

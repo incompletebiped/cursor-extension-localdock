@@ -5,6 +5,7 @@ const SECRET_KEY_PREFIX = 'localdock.creds.';
 const LOCAL_MYSQL_PASSWORD_KEY = 'localdock.localMysqlPassword';
 const DB_PASS_KEY_PREFIX = 'localdock.dbpass.';
 const COMPANION_KEY_PREFIX = 'localdock.companionKey.';
+const LOCAL_COMPANION_KEY_PREFIX = 'localdock.companionKey.local.';
 
 export class CredentialManager {
   constructor(private readonly context: vscode.ExtensionContext) {}
@@ -59,5 +60,18 @@ export class CredentialManager {
 
   async deleteCompanionKey(siteId: string): Promise<void> {
     await this.context.secrets.delete(COMPANION_KEY_PREFIX + siteId);
+  }
+
+  /** Companion API key for the site's local Docker instance — distinct from the remote one. */
+  async storeCompanionKeyLocal(siteId: string, apiKey: string): Promise<void> {
+    await this.context.secrets.store(LOCAL_COMPANION_KEY_PREFIX + siteId, apiKey);
+  }
+
+  async getCompanionKeyLocal(siteId: string): Promise<string | undefined> {
+    return this.context.secrets.get(LOCAL_COMPANION_KEY_PREFIX + siteId);
+  }
+
+  async deleteCompanionKeyLocal(siteId: string): Promise<void> {
+    await this.context.secrets.delete(LOCAL_COMPANION_KEY_PREFIX + siteId);
   }
 }

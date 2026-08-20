@@ -185,6 +185,61 @@ export class DatabaseSyncer {
   }
 
   /**
+   * Upload and apply an arbitrary, already-built SQL script to the remote
+   * database — used for the changelog-driven incremental push, where the
+   * caller has already assembled a minimal script (targeted INSERT/UPDATE/
+   * DELETE statements) instead of a full mysqldump. Reuses the same
+   * upload/import/cleanup shape as pushDatabase(), just without re-exporting
+   * or re-deriving the SQL here.
+   */
+  async pushSqlScript(
+    site: WordPressSite,
+    sqlText: string,
+    onProgress?: (message: string) => void
+  ): Promise<void> {
+    if (!isValidDbIdentifier(site.dbName) || !isValidDbIdentifier(site.dbUser) || !isValidDbHost(site.dbHost)) {
+      throw new LocalDockError(
+        'Invalid database name, user, or host — refusing to push.',
+        LocalDockErrorCode.DB_IMPORT_FAILED,
+        false
+      );
+    }
+
+    const tmpRemote = `/tmp/localdock_push_partial_${site.dbName}_${Date.now()}.sql`;
+    const localTmp = path.join(os.tmpdir(), `localdock_push_partial_${Date.now()}.sql`);
+
+    onProgress?.('Uploading database changes…');
+    await fs.writeFile(localTmp, sqlText, 'utf-8');
+    try {
+      await this.sftp.fastPut(localTmp, tmpRemote);
+
+      onProgress?.('Applying database changes…');
+      logger.info(`[DatabaseSyncer] Applying partial push (${sqlText.length} bytes) to ${site.dbName} on ${site.dbHost}`);
+
+      const { host: dbHost, port: dbPort } = this.parseDbHost(site.dbHost);
+      const importCmd =
+        `MYSQL_PWD='${site.dbPass.replace(/'/g, "'\\''")}' ` +
+        `mysql -h${dbHost} -P${dbPort} -u${site.dbUser} ${site.dbName} < ${tmpRemote}`;
+
+      const importResult = await this.ssh.exec(importCmd);
+
+      await this.ssh.exec(`rm -f ${tmpRemote}`).catch((err) => {
+        logger.warn(`[DatabaseSyncer] Failed to cleanup temp file: ${err.message}`);
+      });
+
+      if (importResult.code !== 0) {
+        throw new LocalDockError(
+          `MySQL import failed: ${importResult.stderr}`,
+          LocalDockErrorCode.DB_IMPORT_FAILED,
+          true
+        );
+      }
+    } finally {
+      await fs.unlink(localTmp).catch(() => {});
+    }
+  }
+
+  /**
    * Replace localhost URLs with the production URL on the server using PHP's own
    * unserialize/serialize so byte counts in PHP serialized options (astra-settings,
    * theme-mods, etc.) are always correct. Raw SQL text replacement corrupts these

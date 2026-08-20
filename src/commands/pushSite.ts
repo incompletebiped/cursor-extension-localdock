@@ -20,6 +20,8 @@ import { WordPressSite } from '../models/Site';
 import { handleError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { makeProgressAdapter } from '../utils/progressUtils';
+import { planDatabasePush, buildDatabasePushSql, ChangelogPushPlan } from '../sync/ChangelogPushPlanner';
+import { fetchCompanionChanges } from '../api/CompanionPluginClient';
 
 const PUSH_PROGRESS = { FILES_START: 10, FILES_END: 80, DB_EXPORT: 82, DB_IMPORT: 85, URL_REWRITE: 87, CACHE: 94, MANIFEST: 97 } as const;
 
@@ -85,12 +87,68 @@ export async function pushSite(
     return;
   }
 
+  // Warn if the server has changes since the last pull that haven't been
+  // pulled down yet (e.g. a plugin installed via wp-admin) — pushing now
+  // would silently overwrite them, the same way a non-fast-forward git push
+  // would be rejected.
+  const remoteApiKey = await credManager.getCompanionKey(site.id);
+  if (remoteApiKey) {
+    const drift = await fetchCompanionChanges(
+      site.domain,
+      remoteApiKey,
+      site.syncState.lastPulledAt,
+      configManager.rejectUnauthorizedSsl
+    );
+    if (drift.ok && drift.changes.length > 0) {
+      const driftChoice = await vscode.window.showWarningMessage(
+        `"${site.domain}" has ${drift.changes.length} change(s) on the server since your last pull — pushing now may overwrite them.`,
+        { modal: true },
+        'Push Anyway',
+        'Pull First'
+      );
+      if (driftChoice === 'Pull First') {
+        vscode.commands.executeCommand('localdockCpanel.pullSite', item);
+        return;
+      }
+      if (driftChoice !== 'Push Anyway') {
+        return;
+      }
+    }
+  }
+
+  // Figure out what the database push actually needs to send, from the local
+  // Companion plugin's changelog, instead of assuming the whole database
+  // changed. Falls back to a full dump (dbPlan stays null) when the local
+  // companion isn't set up yet or the user forced fullDatabasePush.
+  let dbPlan: ChangelogPushPlan | null = null;
+  if (dockerLikelyRunning && !configManager.fullDatabasePush) {
+    const localApiKey = await credManager.getCompanionKeyLocal(site.id);
+    if (localApiKey && manifest.localPort) {
+      dbPlan = await planDatabasePush(
+        `http://localhost:${manifest.localPort}`,
+        localApiKey,
+        site.syncState.lastPushedAt ?? site.syncState.lastPulledAt
+      );
+    }
+  }
+
+  if (!hasFileChanges && dbPlan && dbPlan.isEmpty) {
+    vscode.window.showInformationMessage(`"${site.domain}" is already up to date — nothing to push.`);
+    return;
+  }
+
   // Show confirmation with change summary
+  const dbDescription = !dockerLikelyRunning
+    ? 'will start db container, export, then stop it'
+    : dbPlan
+      ? (dbPlan.isEmpty ? 'already up to date — nothing to push' : `${dbPlan.summary} (incremental)`)
+      : 'will be exported from Docker and pushed';
+
   const changeItems: vscode.QuickPickItem[] = [
     ...diff.added.map((f) => ({ label: `$(add) ${f}`, description: 'will be uploaded' })),
     ...diff.modified.map((f) => ({ label: `$(edit) ${f}`, description: 'will be updated' })),
     ...diff.deleted.map((f) => ({ label: `$(trash) ${f}`, description: 'will be deleted' })),
-    { label: '$(database) database', description: dockerLikelyRunning ? 'will be exported from Docker and pushed' : 'will start db container, export, then stop it' },
+    { label: '$(database) database', description: dbDescription },
   ];
 
   const fileSummary = hasFileChanges ? engine.formatSummary(diff) : 'database only';
@@ -178,56 +236,73 @@ export async function pushSite(
     // Export the database from Docker MySQL — start just the db service if containers
     // aren't running so the user doesn't have to manually start the environment first.
     let dbPushed = false;
+    let dbUpToDate = false;
     let dbFailError: string | null = null;
     let dbServiceStarted = false;
     let dockerDumpPath: string | null = null;
-    try {
-      report(PUSH_PROGRESS.DB_EXPORT, 'Exporting database from Docker…');
 
-      let sql: string;
+    if (dbPlan && dbPlan.isEmpty) {
+      // The local Companion changelog says nothing changed since the last
+      // sync — skip Docker entirely rather than exporting/pushing a dump
+      // that would just replace remote data with an identical copy.
+      dbUpToDate = true;
+    } else {
       try {
-        sql = await dockerManager.exportDatabase(site.localPath!);
-      } catch (firstErr) {
-        if (dockerLikelyRunning) {
-          // Environment IS running — export failed for another reason, don't try to restart
-          throw firstErr;
+        report(PUSH_PROGRESS.DB_EXPORT, 'Exporting database from Docker…');
+
+        let sql: string;
+        try {
+          sql = await dockerManager.exportDatabase(site.localPath!);
+        } catch (firstErr) {
+          if (dockerLikelyRunning) {
+            // Environment IS running — export failed for another reason, don't try to restart
+            throw firstErr;
+          }
+          // Containers not running — start just the db service for the export
+          report(PUSH_PROGRESS.DB_EXPORT, 'Starting database container for export…');
+          await dockerManager.startDbOnly(site.localPath!);
+          dbServiceStarted = true;
+          report(PUSH_PROGRESS.DB_EXPORT + 1, 'Exporting database from Docker…');
+          sql = await dockerManager.exportDatabase(site.localPath!);
         }
-        // Containers not running — start just the db service for the export
-        report(PUSH_PROGRESS.DB_EXPORT, 'Starting database container for export…');
-        await dockerManager.startDbOnly(site.localPath!);
-        dbServiceStarted = true;
-        report(PUSH_PROGRESS.DB_EXPORT + 1, 'Exporting database from Docker…');
-        sql = await dockerManager.exportDatabase(site.localPath!);
-      }
 
-      if (sql && sql.trim().length > 100) {
-        dockerDumpPath = path.join(site.localPath!, '.localdock', 'db.push.tmp.sql');
-        await fs.writeFile(dockerDumpPath, sql, 'utf-8');
-        logger.info(`[pushSite] DB dump: ${sql.length} bytes`);
+        if (sql && sql.trim().length > 100) {
+          const localUrl = manifest.localPort ? `http://localhost:${manifest.localPort}` : undefined;
+          const productionUrl = `https://${site.domain}`;
 
-        report(PUSH_PROGRESS.DB_EXPORT + 2, 'Pushing database…');
-        await dbSyncer.pushDatabase({ ...site, dbPass: siteDbPass }, site.localPath!, (msg) => report(PUSH_PROGRESS.DB_IMPORT, msg), dockerDumpPath);
+          if (dbPlan) {
+            report(PUSH_PROGRESS.DB_EXPORT + 2, 'Building incremental database changes…');
+            const partialSql = await buildDatabasePushSql(site.localPath!, dockerManager, dbPlan);
+            report(PUSH_PROGRESS.DB_IMPORT, 'Pushing database changes…');
+            await dbSyncer.pushSqlScript({ ...site, dbPass: siteDbPass }, partialSql, (msg) => report(PUSH_PROGRESS.DB_IMPORT, msg));
+          } else {
+            dockerDumpPath = path.join(site.localPath!, '.localdock', 'db.push.tmp.sql');
+            await fs.writeFile(dockerDumpPath, sql, 'utf-8');
+            logger.info(`[pushSite] DB dump: ${sql.length} bytes`);
 
-        const localUrl = manifest.localPort ? `http://localhost:${manifest.localPort}` : undefined;
-        const productionUrl = `https://${site.domain}`;
-        if (localUrl && localUrl !== productionUrl) {
-          await dbSyncer.fixUrlsOnServer({ ...site, dbPass: siteDbPass }, localUrl, productionUrl, (msg) => report(PUSH_PROGRESS.URL_REWRITE, msg));
+            report(PUSH_PROGRESS.DB_EXPORT + 2, 'Pushing database…');
+            await dbSyncer.pushDatabase({ ...site, dbPass: siteDbPass }, site.localPath!, (msg) => report(PUSH_PROGRESS.DB_IMPORT, msg), dockerDumpPath);
+          }
+
+          if (localUrl && localUrl !== productionUrl) {
+            await dbSyncer.fixUrlsOnServer({ ...site, dbPass: siteDbPass }, localUrl, productionUrl, (msg) => report(PUSH_PROGRESS.URL_REWRITE, msg));
+          }
+          dbPushed = true;
+        } else {
+          logger.warn('[pushSite] Docker mysqldump returned empty output — DB push skipped');
+          dbFailError = 'mysqldump returned empty output';
         }
-        dbPushed = true;
-      } else {
-        logger.warn('[pushSite] Docker mysqldump returned empty output — DB push skipped');
-        dbFailError = 'mysqldump returned empty output';
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.warn(`[pushSite] Docker DB export failed — DB not pushed: ${msg}`);
-      dbFailError = msg;
-    } finally {
-      if (dbServiceStarted) {
-        await dockerManager.stopDbOnly(site.localPath!).catch(() => {});
-      }
-      if (dockerDumpPath) {
-        await fs.unlink(dockerDumpPath).catch(() => {});
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.warn(`[pushSite] Docker DB export failed — DB not pushed: ${msg}`);
+        dbFailError = msg;
+      } finally {
+        if (dbServiceStarted) {
+          await dockerManager.stopDbOnly(site.localPath!).catch(() => {});
+        }
+        if (dockerDumpPath) {
+          await fs.unlink(dockerDumpPath).catch(() => {});
+        }
       }
     }
 
@@ -264,6 +339,12 @@ export async function pushSite(
     if (dbPushed) {
       vscode.window.showInformationMessage(
         `Pushed ${site.domain} — ${fileCount} file(s) + database synced.`
+      );
+    } else if (dbUpToDate) {
+      vscode.window.showInformationMessage(
+        fileCount > 0
+          ? `Pushed ${site.domain} — ${fileCount} file(s) synced. Database already up to date.`
+          : `${site.domain} is already up to date.`
       );
     } else {
       vscode.window.showInformationMessage(

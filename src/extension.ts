@@ -113,7 +113,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ),
 
     vscode.commands.registerCommand('localdockCpanel.pullSite', (item: SiteTreeItem) =>
-      pullSite(item, registry, credManager, siteTreeProvider, localDockerTreeProvider, activityManager, configManager)
+      pullSite(item, registry, credManager, siteTreeProvider, localDockerTreeProvider, activityManager, configManager, dockerManager)
     ),
 
     vscode.commands.registerCommand('localdockCpanel.pushSite', (item: SiteTreeItem) =>
@@ -121,7 +121,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ),
 
     vscode.commands.registerCommand('localdockCpanel.diffSite', (item: SiteTreeItem) =>
-      diffSite(item, siteTreeProvider, configManager)
+      diffSite(item, siteTreeProvider, configManager, credManager, dockerManager)
     ),
 
     vscode.commands.registerCommand('localdockCpanel.checkRemoteDiff', (item: SiteTreeItem) =>
@@ -148,7 +148,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
 
     vscode.commands.registerCommand('localdockCpanel.startLocal', (item: SiteTreeItem | LocalEnvItem) =>
-      startLocal(item, registry, siteTreeProvider, localDockerTreeProvider, activityManager, dockerManager)
+      startLocal(item, registry, siteTreeProvider, localDockerTreeProvider, activityManager, dockerManager, credManager)
     ),
 
     vscode.commands.registerCommand('localdockCpanel.stopLocal', (item: SiteTreeItem | LocalEnvItem) =>

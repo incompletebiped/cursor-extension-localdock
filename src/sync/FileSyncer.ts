@@ -10,6 +10,33 @@ import { logger } from '../utils/logger';
 export interface DownloadResult {
   fileIndex: SiteManifest['fileIndex'];
   totalFiles: number;
+  /** Files that still failed to download/index after retries — the manifest
+   * has no entry for these, so the next push will treat them as "added"
+   * even though they may already exist correctly on disk. */
+  failedFiles: string[];
+}
+
+/**
+ * Retries a transient per-file failure a few times before giving up. On
+ * Windows, antivirus/Defender can briefly lock a file immediately after it's
+ * written, which makes the read-back in computeMd5()/fs.stat() right after a
+ * successful download fail even though nothing is actually wrong with the
+ * file — a short retry rides that out instead of silently dropping the file
+ * from the manifest.
+ */
+async function withRetry<T>(fn: () => Promise<T>, attempts: number, delayMs: number): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 export class FileSyncer {
@@ -52,6 +79,7 @@ export class FileSyncer {
 
     const semaphore = new Semaphore(this.maxConcurrent);
     const fileIndex: SiteManifest['fileIndex'] = {};
+    const failedFiles: string[] = [];
     let completed = 0;
 
     const tasks = files.map(async (file) => {
@@ -66,28 +94,33 @@ export class FileSyncer {
         }
 
         const localPath = path.join(localBase, file.relativePath);
-        await this.sftp.fastGet(file.fullPath, localPath);
 
-        const md5 = await computeMd5(localPath);
-        const stat = await fs.stat(localPath);
+        try {
+          await withRetry(async () => {
+            await this.sftp.fastGet(file.fullPath, localPath);
+            const md5 = await computeMd5(localPath);
+            const stat = await fs.stat(localPath);
 
-        fileIndex[file.relativePath] = {
-          size: stat.size,
-          mtime: Math.floor(stat.mtimeMs / 1000),
-          md5,
-        };
+            fileIndex[file.relativePath] = {
+              size: stat.size,
+              mtime: Math.floor(stat.mtimeMs / 1000),
+              md5,
+            };
+          }, 3, 250);
+        } catch (err) {
+          logger.warn(
+            `[FileSyncer] Failed to download ${file.relativePath} after retries: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+          failedFiles.push(file.relativePath);
+        }
 
         completed++;
         progress.report({
           message: `Downloading files… (${completed} / ${total})`,
           increment: (1 / total) * 100,
         });
-      } catch (err) {
-        logger.warn(
-          `[FileSyncer] Failed to download ${file.relativePath}: ${
-            err instanceof Error ? err.message : String(err)
-          }`
-        );
       } finally {
         semaphore.release();
       }
@@ -95,7 +128,108 @@ export class FileSyncer {
 
     await Promise.allSettled(tasks);
 
-    return { fileIndex, totalFiles: total };
+    if (failedFiles.length > 0) {
+      logger.warn(`[FileSyncer] ${failedFiles.length} of ${total} file(s) failed to download after retries`);
+    }
+
+    return { fileIndex, totalFiles: total, failedFiles };
+  }
+
+  /**
+   * Downloads only the given paths and removes only the given local paths —
+   * the incremental counterpart to downloadAll(), used for a re-pull once a
+   * manifest baseline exists so unchanged files (the vast majority of a
+   * site) are never touched.
+   */
+  async downloadChanged(
+    remoteBase: string,
+    localBase: string,
+    filesToDownload: string[],
+    filesToDelete: string[],
+    token: vscode.CancellationToken,
+    progress: vscode.Progress<{ message?: string; increment?: number }>
+  ): Promise<DownloadResult> {
+    const total = filesToDownload.length + filesToDelete.length;
+    const semaphore = new Semaphore(this.maxConcurrent);
+    const fileIndex: SiteManifest['fileIndex'] = {};
+    const failedFiles: string[] = [];
+    let completed = 0;
+
+    const downloadTasks = filesToDownload.map(async (relPath) => {
+      if (token.isCancellationRequested) {
+        return;
+      }
+
+      await semaphore.acquire();
+      try {
+        if (token.isCancellationRequested) {
+          return;
+        }
+
+        const localPath = path.join(localBase, relPath);
+        const remotePath = `${remoteBase}/${relPath}`;
+
+        try {
+          await withRetry(async () => {
+            await this.sftp.fastGet(remotePath, localPath);
+            const md5 = await computeMd5(localPath);
+            const stat = await fs.stat(localPath);
+
+            fileIndex[relPath] = {
+              size: stat.size,
+              mtime: Math.floor(stat.mtimeMs / 1000),
+              md5,
+            };
+          }, 3, 250);
+        } catch (err) {
+          logger.warn(
+            `[FileSyncer] Failed to download ${relPath} after retries: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+          failedFiles.push(relPath);
+        }
+
+        completed++;
+        progress.report({
+          message: `Downloading changed files… (${completed} / ${total})`,
+          increment: (1 / total) * 100,
+        });
+      } finally {
+        semaphore.release();
+      }
+    });
+
+    const deleteTasks = filesToDelete.map(async (relPath) => {
+      if (token.isCancellationRequested) {
+        return;
+      }
+
+      await semaphore.acquire();
+      try {
+        const localPath = path.join(localBase, relPath);
+        await fs.unlink(localPath).catch((err) => {
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+            logger.warn(`[FileSyncer] Failed to remove local file ${relPath}: ${err.message}`);
+          }
+        });
+        completed++;
+        progress.report({
+          message: `Removing locally-deleted-on-server files… (${completed} / ${total})`,
+          increment: (1 / total) * 100,
+        });
+      } finally {
+        semaphore.release();
+      }
+    });
+
+    await Promise.allSettled([...downloadTasks, ...deleteTasks]);
+
+    if (failedFiles.length > 0) {
+      logger.warn(`[FileSyncer] ${failedFiles.length} of ${filesToDownload.length} file(s) failed to download after retries`);
+    }
+
+    return { fileIndex, totalFiles: filesToDownload.length, failedFiles };
   }
 
   async uploadChanged(

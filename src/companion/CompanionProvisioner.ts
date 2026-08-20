@@ -8,8 +8,18 @@ import { COMPANION_PLUGIN_FILES } from './companionPluginFiles.generated';
 import { isValidDbIdentifier, isValidDbHost } from '../utils/pathUtils';
 import { LocalDockError, LocalDockErrorCode } from '../utils/errors';
 import { logger } from '../utils/logger';
+import { DockerManager } from '../docker/DockerManager';
 
 const PLUGIN_REMOTE_DIR = 'wp-content/plugins/localdock-companion';
+
+// Fixed credentials the local Docker `db` service is always provisioned with
+// (see DockerManager.buildComposeTemplate) — not secrets, since the container
+// isn't reachable outside the Docker network.
+const LOCAL_DB_SERVICE = 'db';
+const LOCAL_WP_SERVICE = 'wordpress';
+const LOCAL_DB_NAME = 'wordpress';
+const LOCAL_DB_USER = 'wordpress';
+const LOCAL_DB_PASS = 'wordpress';
 
 export interface ProvisionResult {
   activated: boolean;
@@ -241,4 +251,115 @@ function parseDbHost(dbHost: string): { host: string; port: string } {
     return { host: dbHost.substring(0, idx), port: dbHost.substring(idx + 1) };
   }
   return { host: dbHost, port: '3306' };
+}
+
+export interface LocalProvisionResult {
+  activated: boolean;
+  apiKey?: string;
+}
+
+/**
+ * Local-Docker counterpart to provisionCompanionPlugin(): installs and
+ * activates the Companion plugin inside the site's own Docker containers so
+ * its changelog can drive incremental push. Called silently from startLocal —
+ * failure here is non-fatal, since a missing local companion just means push
+ * falls back to a full database dump.
+ */
+export async function provisionCompanionPluginLocal(
+  localSitePath: string,
+  dockerManager: DockerManager
+): Promise<LocalProvisionResult> {
+  await writeLocalPluginFiles(localSitePath);
+
+  const activated = await activateLocalPlugin(localSitePath, dockerManager);
+  if (!activated) {
+    return { activated: false };
+  }
+
+  const apiKey = await fetchLocalApiKey(localSitePath, dockerManager);
+  return { activated: true, apiKey };
+}
+
+async function writeLocalPluginFiles(localSitePath: string): Promise<void> {
+  const pluginDir = path.join(localSitePath, 'wp-content', 'plugins', 'localdock-companion');
+  for (const [relativePath, content] of Object.entries(COMPANION_PLUGIN_FILES)) {
+    const filePath = path.join(pluginDir, relativePath);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, content, 'utf-8');
+  }
+}
+
+/**
+ * Activates via a PHP CLI script run inside the `wordpress` container, the
+ * same activate_plugin() approach tryActivateViaPhpCli() uses remotely. The
+ * script is written into .localdock/ on the host, which is bind-mounted into
+ * the container at /var/www/html, so no file transfer is needed.
+ */
+async function activateLocalPlugin(localSitePath: string, dockerManager: DockerManager): Promise<boolean> {
+  const relScript = '.localdock/companion-activate-local.php';
+  const script = [
+    '<?php',
+    "require '/var/www/html/wp-load.php';",
+    "if (!function_exists('activate_plugin')) { require_once ABSPATH . 'wp-admin/includes/plugin.php'; }",
+    "$result = activate_plugin('localdock-companion/localdock-companion.php');",
+    'if (is_wp_error($result)) { fwrite(STDERR, $result->get_error_message()); exit(1); }',
+    "echo 'LOCALDOCK_ACTIVATED';",
+  ].join('\n');
+
+  const absScriptPath = path.join(localSitePath, relScript);
+  await fs.mkdir(path.dirname(absScriptPath), { recursive: true });
+  await fs.writeFile(absScriptPath, script, 'utf-8');
+
+  try {
+    const result = await dockerManager.execInService(localSitePath, LOCAL_WP_SERVICE, [
+      'php',
+      `/var/www/html/${relScript}`,
+    ]);
+    if (result.code !== 0 || !result.stdout.includes('LOCALDOCK_ACTIVATED')) {
+      logger.warn(`[CompanionProvisioner] Local activation failed: ${result.stdout}${result.stderr}`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logger.warn(`[CompanionProvisioner] Local activation errored: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  } finally {
+    await fs.unlink(absScriptPath).catch(() => {});
+  }
+}
+
+/**
+ * Reads the plugin's generated API key back via `docker compose exec db mysql`
+ * (the `db` service has no host port mapping, so it can't be reached the way
+ * fetchApiKeyFromDb() reaches a remote database over SSH). Two separate
+ * queries instead of the remote version's PREPARE/EXECUTE dynamic SQL, since
+ * exec() args here are passed straight to the container with no shell
+ * involved — no quoting gymnastics needed, so keeping it as two plain
+ * SELECTs is simpler than building one dynamic statement.
+ */
+async function fetchLocalApiKey(localSitePath: string, dockerManager: DockerManager): Promise<string | undefined> {
+  try {
+    const tableResult = await dockerManager.execInService(localSitePath, LOCAL_DB_SERVICE, [
+      'mysql', `-u${LOCAL_DB_USER}`, `-p${LOCAL_DB_PASS}`, '-N', LOCAL_DB_NAME, '-e',
+      "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME LIKE '%\\_options' LIMIT 1",
+    ]);
+    const table = tableResult.stdout.trim();
+    if (tableResult.code !== 0 || !/^[A-Za-z0-9_]+$/.test(table)) {
+      logger.warn(`[CompanionProvisioner] Could not resolve local options table: ${tableResult.stderr || table}`);
+      return undefined;
+    }
+
+    const keyResult = await dockerManager.execInService(localSitePath, LOCAL_DB_SERVICE, [
+      'mysql', `-u${LOCAL_DB_USER}`, `-p${LOCAL_DB_PASS}`, '-N', LOCAL_DB_NAME, '-e',
+      `SELECT option_value FROM ${table} WHERE option_name='localdock_api_key' LIMIT 1`,
+    ]);
+    if (keyResult.code !== 0) {
+      logger.warn(`[CompanionProvisioner] Local API key lookup failed: ${keyResult.stderr}`);
+      return undefined;
+    }
+    return keyResult.stdout.trim() || undefined;
+  } catch (err) {
+    logger.warn(`[CompanionProvisioner] Local API key lookup errored: ${err instanceof Error ? err.message : String(err)}`);
+    return undefined;
+  }
 }

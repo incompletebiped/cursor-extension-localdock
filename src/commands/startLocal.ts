@@ -8,6 +8,8 @@ import { ActivityManager } from '../ActivityManager';
 import { DockerManager } from '../docker/DockerManager';
 import { DatabaseSyncer } from '../sync/DatabaseSyncer';
 import { SiteRegistry } from '../SiteRegistry';
+import { CredentialManager } from '../auth/CredentialManager';
+import { provisionCompanionPluginLocal } from '../companion/CompanionProvisioner';
 import { readManifest, writeManifest } from '../sync/Manifest';
 import { handleError, LocalDockError, LocalDockErrorCode } from '../utils/errors';
 import { logger } from '../utils/logger';
@@ -20,7 +22,8 @@ export async function startLocal(
   siteTreeProvider: SiteTreeProvider,
   localDockerTreeProvider: LocalDockerTreeProvider,
   activityManager: ActivityManager,
-  dockerManager: DockerManager
+  dockerManager: DockerManager,
+  credManager: CredentialManager
 ): Promise<void> {
   const site = item.site;
 
@@ -199,6 +202,22 @@ export async function startLocal(
     const status = await dockerManager.getStatus(site.localPath);
     if (status !== 'running') {
       throw new Error(`Containers did not reach running state (status: ${status})`);
+    }
+
+    // Best-effort: provision the Companion plugin inside the local containers
+    // too, so push can diff against its changelog instead of pushing the
+    // entire database every time. Never blocks or fails startLocal — a site
+    // without it just falls back to a full database push.
+    activityManager.update(opId, 97, 'Setting up local change tracking…');
+    try {
+      const localCompanion = await provisionCompanionPluginLocal(site.localPath, dockerManager);
+      if (localCompanion.apiKey) {
+        await credManager.storeCompanionKeyLocal(site.id, localCompanion.apiKey);
+      } else {
+        logger.warn(`[startLocal] Local Companion plugin did not activate cleanly for ${site.domain}; push will use a full database dump.`);
+      }
+    } catch (err) {
+      logger.warn(`[startLocal] Local Companion provisioning failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
     }
 
     activityManager.complete(opId);

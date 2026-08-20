@@ -427,6 +427,11 @@
           "default": "mysqldump",
           "description": "Method to use for database export/import."
         },
+        "localdockCpanel.fullDatabasePush": {
+          "type": "boolean",
+          "default": false,
+          "description": "Force a full database dump-and-replace on every push instead of the changelog-driven incremental push (which sends only the options/posts/users the local Companion plugin recorded as changed). Enable for troubleshooting, or to deliberately promote the entire local database state to production."
+        },
         "localdockCpanel.maxConcurrentTransfers": {
           "type": "number",
           "default": 20,
